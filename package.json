@@ -1,0 +1,23 @@
+{
+  "name": "cmpsc431w-project-echo",
+  "version": "1.0.0",
+  "description": "Final project",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type" : "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/psu-db/cmpsc431w-project-echo.git"
+  },
+  "author": "Chen Zheng, Jason Zheng",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/psu-db/cmpsc431w-project-echo/issues"
+  },
+  "homepage": "https://github.com/psu-db/cmpsc431w-project-echo#readme",
+  "dependencies": {
+    "postgres": "^3.4.5"
+  }
+}
