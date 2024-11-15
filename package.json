@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "type" : "module",
+  "type": "module",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/psu-db/cmpsc431w-project-echo.git"
@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/psu-db/cmpsc431w-project-echo#readme",
   "dependencies": {
+    "express": "^4.21.1",
     "postgres": "^3.4.5"
   }
 }
