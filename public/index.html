@@ -34,7 +34,7 @@ TO-DO list app
         <div class="card">
           <h5 class="card-header">Login</h5>
           <div class="card-body">
-            <form>
+            <form onsubmit="tryLogin();" action="javascript:void(0);">
               <div class="mb-3">
                 <label for="login-username" class="form-label">Username</label>
                 <input type="text" class="form-control" id="login-username">
@@ -61,6 +61,36 @@ TO-DO list app
 
       </div>
     </div>
+
+    <script>
+
+      /**
+       * Request against the API
+       * @param request Object
+       * @param params Object
+       * @return Object
+       */
+      async function request(request){
+        try {
+          const ret = await fetch('api/' + encodeURIComponent(JSON.stringify(request)));
+          if (!ret.ok){
+            throw new Error(`Response status: ${response.status}`);
+          }
+          return await ret.json();
+        }
+        catch (e) {
+          alert('Error in request, see console for details. Please refresh the page.');
+          console.error(e.message);
+        }
+      }
+
+      /**
+       * Attempt to login and save the auth token.
+       */
+      function tryLogin(){
+        console.log(request({'hi': 123}));
+      }
+    </script>
 
   </body>
 </html>

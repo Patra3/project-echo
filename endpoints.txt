@@ -1,0 +1,6 @@
+/api/:request ENDPOINTS
+
+:request = [endpoint, param1, param2, ...]
+-> return template
+
+['login', username, password] -> {'status': 'OK', 'token' : 'abc', 'expires' : timestamp}
