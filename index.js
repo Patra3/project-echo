@@ -6,20 +6,19 @@ import path from 'path';
 import sql from './db.js';
 //////////////////////
 
-/*
-await sql`
-CREATE TABLE Persons (
-    PersonID int,
-    LastName varchar(255),
-    FirstName varchar(255),
-    Address varchar(255),
-    City varchar(255)
-);
-`;*/
-
 // Host our web app and define our APIs
 const app = express();
 const port = 8080;
+
+
+
+/**
+ * Checks the postgres database to ensure tables are of correct specifications.
+ * If not, we can initialize or create what's missing.
+ */
+async function dbCheck(){
+    
+}
 
 ///// WEB APIs /////
 // Format: route: (req, res) => ()
@@ -36,6 +35,8 @@ let webApiListeners = {
                 // Params
                 let username = request[1];
                 let password = request[2];
+                // Let's try it against the known DB entries.
+                
             }
             else{
                 res.send('Invalid API request format.');

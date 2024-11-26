@@ -85,10 +85,17 @@ TO-DO list app
       }
 
       /**
+       * Short getElementById wrapper
+       */
+      function gebi(id){
+        return document.getElementById(id);
+      }
+
+      /**
        * Attempt to login and save the auth token.
        */
       function tryLogin(){
-        console.log(request({'hi': 123}));
+        console.log(request(['login', gebi('login-username').value, gebi('login-password').value]));
       }
     </script>
 
