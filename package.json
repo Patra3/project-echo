@@ -18,6 +18,7 @@
   },
   "homepage": "https://github.com/psu-db/cmpsc431w-project-echo#readme",
   "dependencies": {
+    "chalk": "^5.3.0",
     "express": "^4.21.1",
     "postgres": "^3.4.5"
   }
