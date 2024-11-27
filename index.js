@@ -15,9 +15,23 @@ const port = 8080;
 /**
  * Checks the postgres database to ensure tables are of correct specifications.
  * If not, we can initialize or create what's missing.
+ * 
+ * @param forceClear bool - Whether to reset the DB
  */
-async function dbCheck(){
-    
+async function dbCheck(forceClear = false){
+    let test = {
+        'Users' : `(
+            UserID SERIAL NOT NULL PRIMARY KEY,
+            Username    VARCHAR(100) NOT NULL,
+            Email VARCHAR(320) NOT NULL,
+            PhoneNumber INT,
+            PasswordHash VARCHAR(128),
+            PasswordSalt VARCHAR(16)
+        )`,
+        'UserSessionToken' : `(
+            Token 
+        )`
+    }
 }
 
 ///// WEB APIs /////
