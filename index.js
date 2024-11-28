@@ -66,19 +66,89 @@ async function generatePasswordHash(password, salt = ''){
 }
 
 /**
- * Resets the DB entirely. DANGEROUS.
+ * Resets the DB entirely. DANGEROUS!!
  */
 async function reset(){
     c.boldDanger('\n Deleting and resetting DB.. ');
+
+    
     try {
-        console.log(await sql`DROP TABLE UserSessionToken`);
-        console.log(await sql`DROP TABLE Groups`);
-        console.log(await sql`DROP TABLE TaskViews`);
-        console.log(await sql`DROP TABLE Users`);
+        console.log(await sql`DROP TABLE TaskMessages CASCADE;`);
     }
     catch(e){
-        console.log(e);
+        c.notice(e.message);
     }
+
+    try {
+        console.log(await sql`DROP TABLE Tags CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+    
+    try {
+        console.log(await sql`DROP TABLE TaskQueries CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
+        console.log(await sql`DROP TABLE UserTasks CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
+        console.log(await sql`DROP TABLE UserGroups CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
+        console.log(await sql`DROP TABLE UserSessionToken CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
+        console.log(await sql`DROP TABLE Tasks CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
+        console.log(await sql`DROP TABLE TaskViews CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
+        console.log(await sql`DROP TABLE Groups CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
+        console.log(await sql`DROP TABLE Users CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
+        console.log(await sql`DROP TABLE Attachments CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
 }
 
 
@@ -89,6 +159,25 @@ async function reset(){
  */
 async function dbCheck(){
     c.runBigProcess('\n' + ' Running DB initialization.. ');
+    // Create attachments table
+    try {
+        await sql`CREATE TABLE Attachments(
+            AttachmentID SERIAL PRIMARY KEY,
+            FileName TEXT NOT NULL,
+            DateAdded TIMESTAMP NOT NULL,
+            ModifiedDate TIMESTAMP NOT NULL,
+            FilePath TEXT NOT NULL
+        );`
+        c.white('* Attachments table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* Attachments table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
     // Create users table
     try {
         await sql`CREATE TABLE Users(
@@ -97,8 +186,12 @@ async function dbCheck(){
             Email VARCHAR(320),
             PhoneNumber INT,
             Admin BOOLEAN NOT NULL,
+            PfpAttachmentID INT,
             PasswordHash VARCHAR(128) NOT NULL,
-            PasswordSalt VARCHAR(16) NOT NULL
+            PasswordSalt VARCHAR(16) NOT NULL,
+            FOREIGN KEY (PfpAttachmentID) REFERENCES Attachments(AttachmentID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
         );`
         // Add the default admin user
         const adminCreds = await generatePasswordHash('admin');
@@ -160,7 +253,7 @@ async function dbCheck(){
     // Create Groups table
     try {
         await sql`CREATE TABLE Groups(
-            GroupID SERIAL NOT NULL,
+            GroupID SERIAL NOT NULL PRIMARY KEY,
             GroupName VARCHAR(100) NOT NULL,
             AdminID INT NOT NULL,
             FOREIGN KEY (AdminID) REFERENCES Users(UserID)
@@ -170,6 +263,149 @@ async function dbCheck(){
     catch(e){
         if (e.message.includes('already exists')){
             c.notice(`* Groups table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
+    // Create Tasks table
+    try {
+        await sql`CREATE TABLE Tasks(
+            TaskID SERIAL NOT NULL PRIMARY KEY,
+            TaskStatus VARCHAR(20),
+            GroupID INT,
+            AttachmentID INT,
+            Description TEXT,
+            Priority VARCHAR(15),
+            StartDate TIMESTAMP,
+            EndDate TIMESTAMP,
+            ScheduledDate TIMESTAMP,
+            CreatedDate TIMESTAMP,
+            CompletedDate TIMESTAMP,
+            ArchivedDate TIMESTAMP,
+            FOREIGN KEY (GroupID) REFERENCES Groups(GroupID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
+            FOREIGN KEY (AttachmentID) REFERENCES Attachments(AttachmentID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        );`
+        c.white('* Tasks table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* Tasks table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
+    // Create user groups table (user in group)
+    try {
+        await sql`CREATE TABLE UserGroups(
+            UserID INT NOT NULL,
+            GroupID INT NOT NULL,
+            PRIMARY KEY (UserID, GroupID),
+            FOREIGN KEY (UserID) REFERENCES Users(UserID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
+            FOREIGN KEY (GroupID) REFERENCES Groups(GroupID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        );`
+        c.white('* UserGroups table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* UserGroups table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
+    // Create user tasks table
+    try {
+        await sql`CREATE TABLE UserTasks(
+            UserID INT NOT NULL,
+            TaskID INT NOT NULL,
+            PRIMARY KEY (UserID, TaskID),
+            FOREIGN KEY (UserID) REFERENCES Users(UserID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
+            FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        );`
+        c.white('* UserTasks table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* UserTasks table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
+    // Create task queries table    
+    try {
+        await sql`CREATE TABLE TaskQueries(
+            TaskQueryID SERIAL PRIMARY KEY,
+            UserID INT NOT NULL,
+            TaskQuery TEXT NOT NULL,
+            FOREIGN KEY (UserID) REFERENCES Users(UserID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        );`
+        c.white('* TaskQueries table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* TaskQueries table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
+    // Create Tags table
+    try {
+        await sql`CREATE TABLE Tags(
+            TaskID INT,
+            TagName TEXT NOT NULL,
+            PRIMARY KEY (TaskID, TagName),
+            FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID)
+                ON UPDATE CASCADE
+                ON DELETE CASCADE
+        );`
+        c.white('* Tags table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* Tags table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
+    // Create Task message table
+    try {
+        await sql`CREATE TABLE TaskMessages(
+            MessageID SERIAL PRIMARY KEY,
+            TaskID INT NOT NULL,
+            UserID INT NOT NULL,
+            Message TEXT NOT NULL,
+            Tstamp TIMESTAMP NOT NULL,
+            FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE,
+            FOREIGN KEY (UserID) REFERENCES Users(UserID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        );`
+        c.white('* TaskMessages table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* TaskMessages table already exists, skipping...`);
         }
         else{
             c.error('* ' + e);
@@ -227,7 +463,7 @@ let webApiListeners = {
                     }
                 }
             }
-            else if (endpoint === ''){
+            else if (endpoint === 'GetAllTasks'){
                 
             }
             else{
