@@ -7,6 +7,7 @@ import sql from './db.js';
 import chalk from 'chalk';
 import crypto from 'crypto';
 import util from 'util';
+import {nanoid} from 'nanoid';
 //////////////////////
 
 // Host our web app and define our APIs
@@ -33,8 +34,15 @@ const c = {
     },
     success: msg => {
         console.log(chalk.bgGreen(msg));
+    },
+    inverse: msg => {
+        console.log(chalk.inverse(msg));
     }
 };
+
+function str(data){
+    return JSON.stringify(data);
+}
 
 /**
  * Generates a password hash and salt for storing in the DB.
@@ -64,6 +72,8 @@ async function reset(){
     c.boldDanger('\n Deleting and resetting DB.. ');
     try {
         console.log(await sql`DROP TABLE UserSessionToken`);
+        console.log(await sql`DROP TABLE Groups`);
+        console.log(await sql`DROP TABLE TaskViews`);
         console.log(await sql`DROP TABLE Users`);
     }
     catch(e){
@@ -111,7 +121,7 @@ async function dbCheck(){
         await sql`CREATE TABLE UserSessionToken(
             Token VARCHAR(21) NOT NULL PRIMARY KEY,
             IssuedDate TIMESTAMP NOT NULL,
-            ExpireDate TIMESTAMP NOT NULL,
+            ExpireDate TIMESTAMP,
             UserID SERIAL NOT NULL,
             FOREIGN KEY (UserID) REFERENCES Users(UserID)
                 ON DELETE CASCADE
@@ -127,6 +137,44 @@ async function dbCheck(){
             c.error('* ' + e);
         }
     }
+    // Create TaskViews (TaskQueries) table
+    try {
+        await sql`CREATE TABLE TaskViews(
+            TaskViewID SERIAL PRIMARY KEY,
+            UserID INT NOT NULL,
+            TaskQuery TEXT NOT NULL,
+            FOREIGN KEY (UserID) REFERENCES Users(UserID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        );`
+        c.white('* TaskViews table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* TaskViews table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
+    // Create Groups table
+    try {
+        await sql`CREATE TABLE Groups(
+            GroupID SERIAL NOT NULL,
+            GroupName VARCHAR(100) NOT NULL,
+            AdminID INT NOT NULL,
+            FOREIGN KEY (AdminID) REFERENCES Users(UserID)
+        );`
+        c.white('* Groups table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* Groups table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
     c.white('\n\n');
 }
 
@@ -137,36 +185,50 @@ let webApiListeners = {
         res.sendFile(path.resolve('public/index.html'));
     },
     '/api/:request' : async (req, res) => {
-        let p = req.params;
+        const p = req.params;
         try {
-            let request = JSON.parse(p.request);
-            let endpoint = request[0];
+            const request = JSON.parse(p.request);
+            const endpoint = request[0];
             if (endpoint === 'login'){
                 // Params
-                let username = request[1];
-                let password = request[2];
+                const username = request[1];
+                const password = request[2];
                 // Let's try it against the known DB entries.
-                const d = await sql`SELECT PasswordHash, PasswordSalt from Users where Username = ${username}`;
-                const realpwd = d[0].passwordhash;
-                const realsalt = d[0].passwordsalt;
-                if (d.length == 0){
-                    // No user exists in the DB.
-                    res.send(JSON.stringify({
-                        status: 'NOUSEREXISTS'
+                const d = await sql`SELECT PasswordHash, PasswordSalt, UserID from Users where Username = ${username}`;
+                if (d.length <= 0){
+                    res.send(str({
+                        status: 'INVALID'
                     }));
+                    return;
                 }
                 else{
+                    const realpwd = d[0].passwordhash;
+                    const realsalt = d[0].passwordsalt;
                     // Check password hash.
                     const attemptedHash = (await generatePasswordHash(password, realsalt)).hash;
                     if (attemptedHash === realpwd){
                         // Let's generate a user session token and hand it to them.
+                        const sessionToken = nanoid();
+                        const exp = Date.now() + 300000;
+                        await sql`
+                        INSERT INTO UserSessionToken(Token, IssuedDate, ExpireDate, UserID) VALUES
+                        (${sessionToken}, ${Date.now()}, ${exp}, ${d[0].userid});
+                        `;
+                        res.send(str({
+                            status: 'OK',
+                            token: sessionToken,
+                            expires: exp
+                        }));
                     }
                     else{
-                        res.send(JSON.stringify({
-                            status: 'PSWDINCORRECT'
+                        res.send(str({
+                            status: 'INVALID'
                         }));
                     }
                 }
+            }
+            else if (endpoint === ''){
+                
             }
             else{
                 res.send('Invalid API request format.');
@@ -190,7 +252,7 @@ process.on('SIGINT', () => {
 
 reset().then(() => dbCheck().then(() => {
     app.listen(port, () => {
-        c.success(' App listening on port ' + port + ' ');
-        c.white('Local URL: http://localhost:' + port);
+        c.success(` App listening on port ${port} `);
+        c.white(`Local URL: http://localhost:${port}`);
     });
 }));

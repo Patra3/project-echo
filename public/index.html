@@ -64,6 +64,21 @@ TO-DO list app
 
     <script>
 
+      let storage = {
+        write: (key, value) => {
+          localStorage.setItem(key, JSON.stringify([value]));
+        },
+        read: key => {
+          return JSON.parse(localStorage.getItem(key))[0];
+        },
+        delete: key => {
+          localStorage.removeItem(key);
+        },
+        clear: () => {
+          localStorage.clear();
+        }
+      }
+
       /**
        * Request against the API
        * @param request Object
@@ -95,7 +110,26 @@ TO-DO list app
        * Attempt to login and save the auth token.
        */
       function tryLogin(){
-        console.log(request(['login', gebi('login-username').value, gebi('login-password').value]));
+        request(['login', gebi('login-username').value, gebi('login-password').value]).then(val => {
+          let status = val.status;
+          if (status == 'OK'){
+            // Let's save the session token.
+            storage.write('sessionToken', val.token);
+            storage.write('sessionTokenExpires', val.expires);
+            // Reload the page.
+            location.reload();
+          }
+          else if (status == 'INVALID'){
+            alert('The credentials are incorrect, please try again.');
+          }
+          else{
+            alert('An unexpected error has occurred.');
+            location.reload();
+          }
+        }).catch(e => {
+          alert('An unexpected error has occurred.');
+          console.error(e);
+        });
       }
     </script>
 
