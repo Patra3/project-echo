@@ -3,11 +3,12 @@
 ///// APP IMPORTS /////
 import express from 'express';
 import path from 'path';
-import sql from './db.js';
 import chalk from 'chalk';
+import sql from './db.js';
 import crypto from 'crypto';
 import util from 'util';
 import {nanoid} from 'nanoid';
+import fs from 'fs';
 //////////////////////
 
 // Host our web app and define our APIs
@@ -168,7 +169,17 @@ async function dbCheck(){
             ModifiedDate TIMESTAMP NOT NULL,
             FilePath TEXT NOT NULL
         );`
+        const p = path.resolve('default-pfp.jpeg');
+        const attachmentID = await sql`
+            INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
+            (${path.basename(p)}, ${Date.now()}, ${Date.now()}, ${p}) RETURNING AttachmentID;
+        `;
+        if (attachmentID[0].attachmentid != 1){
+            c.boldDanger(' This app requires SERIAL type to start at 1, please adjust your table settings and try again. ');
+            process.exit();
+        }
         c.white('* Attachments table created.');
+        c.white('   * Default attachments loaded.');
     }
     catch(e){
         if (e.message.includes('already exists')){
@@ -196,8 +207,8 @@ async function dbCheck(){
         // Add the default admin user
         const adminCreds = await generatePasswordHash('admin');
         await sql`
-            INSERT INTO Users(Username, Admin, PasswordHash, PasswordSalt)
-            VALUES ('admin', TRUE, ${adminCreds.hash}, ${adminCreds.salt});
+            INSERT INTO Users(Username, Admin, PasswordHash, PasswordSalt, PfpAttachmentID)
+            VALUES ('admin', TRUE, ${adminCreds.hash}, ${adminCreds.salt}, ${1});
         `;
         c.white('* Users table created.');
     }
@@ -277,9 +288,7 @@ async function dbCheck(){
             AttachmentID INT,
             Description TEXT,
             Priority INT,
-            StartDate TIMESTAMP,
-            EndDate TIMESTAMP,
-            ScheduledDate TIMESTAMP,
+            DueDate TIMESTAMP,
             CreatedDate TIMESTAMP,
             CompletedDate TIMESTAMP,
             ArchivedDate TIMESTAMP,
@@ -424,7 +433,7 @@ async function verifySessionToken(sessionToken){
     // Let's clean the session token table by wiping expired ones.
     await sql`
         DELETE FROM UserSessionToken WHERE
-        ExpireDate <= ${Date.now()}
+        ExpireDate <= ${Date.now()};
     `;
     // Let's query the session token table.
     const res = await sql`
@@ -441,14 +450,128 @@ async function verifySessionToken(sessionToken){
 }
 
 /**
+ * Get all groups that the user is in.
+ * @param {int} userID 
+ */
+async function getAllUserGroups(userID){
+    // First let's query for all the groups we are in.
+    let res = await sql`SELECT * FROM UserGroups WHERE 
+    UserID = ${userID}`;
+    // Check if there is no groups.
+    if (res.length == 0){
+        // We need to create a default group, and also add to UserGroups this relation.
+        const t = await sql`INSERT INTO Groups(AdminID, GroupName) 
+        VALUES (${userID}, 'Personal') RETURNING GroupID;`;
+        const groupID = t[0].groupid;
+        await sql`INSERT INTO UserGroups(UserID, GroupID)
+        VALUES (${userID}, ${groupID})`
+        res = await sql`SELECT * FROM UserGroups WHERE UserID = ${userID}`;
+    }
+    return res;
+}
+
+/**
+ * Get a group.
+ * @param {int} groupID 
+ */
+async function getGroup(groupID){
+    const res = await sql`
+        SELECT * FROM Groups WHERE GroupID = ${groupID}
+    `;
+    if (res.length === 0){
+        return -1;
+    }
+    return res[0];
+}
+
+async function getUserGroups(userID){
+    let res = await getAllUserGroups(userID);   
+    console.log(res);
+    res = res.map(entry => getGroup(entry.groupid));
+    res = await Promise.all(res);
+    return res;
+}
+
+/**
  * Get all tasks across all groups, sorted by due date.
  * @param {*} userID 
  */
 async function getAllTasks(userID){
     // First let's query for all the groups we are in.
-    const res = await sql`SELECT GroupID FROM UserGroups WHERE 
-    UserID = ${userID}`;
-    console.log(res);
+    let res = await getAllUserGroups(userID);
+    // Now let's find the tasks under every group.
+    let transform = res.map(entry => entry.groupid);
+    // This query does WHERE GroupID IN [ array of group ids ... ],
+    // The equivalent SQL syntax may be WHERE GroupID IN ('elem1', 'elem2', etc..)
+    // except that this library lets me do this dynamically
+    // Otherwise, with a different SQL library we just need to append elements to
+    // the query string in this format, so it's not so different anyways.
+    let tasks = await sql`
+        SELECT * FROM Tasks WHERE GroupID IN ${sql(transform)}
+        ORDER BY DueDate ASC, Priority ASC;
+    `;
+    return tasks;
+}
+
+/**
+ * Get attachment data from the DB
+ * (including binary file data).
+ * @param {*} attachmentID 
+ */
+async function getAttachment(attachmentID){
+    const res = await sql`
+        SELECT * FROM Attachments WHERE AttachmentID = ${attachmentID}
+    `;
+    if (res.length === 0){
+        return -1;
+    }
+    const fpath = res[0].filepath;
+    // Read file data.
+    const rd = util.promisify(fs.readFile);
+    try {
+        const hexData = await rd(fpath, 'hex');
+        // Let's return this data as a package.
+        return {
+            hexData: hexData,
+            fileName: res[0].filename,
+            lastModified: res[0].modifieddate,
+            dateAdded: res[0].dateadded
+        };
+    }
+    catch(e){
+        c.error(`Error reading attachment ${fpath}`);
+        c.error(e);
+    }
+}
+
+/**
+ * Get the details of a specific user (manually also encode the profile picture info).
+ * sessionToken is needed to ensure scope privileges.
+ * @param {int} userID 
+ * @param {string} sessionToken
+ */
+async function getUser(userID, sessionToken){
+    let res;
+    // Are we fetching ourself? If so, we can get every column.
+    if ((await verifySessionToken(sessionToken)) === userID){
+        res = await sql`
+            SELECT UserID, Username, Email, PhoneNumber, Admin, PfpAttachmentID
+             FROM Users WHERE UserID = ${userID};
+        `
+    }
+    else{
+        // We are fetching other user, so limit the scope.
+        res = await sql`
+            SELECT UserID, Username, PfpAttachmentID FROM Users WHERE
+            UserID = ${userID};
+        `
+    }
+    // Now we need to resolve the pfp situation.
+    const pfpData = await getAttachment(res[0].pfpattachmentid);
+    let b = res[0];
+    delete b.pfpattachmentid;
+    b.pfp = pfpData;
+    return b;
 }
 
 ///// WEB APIs /////
@@ -462,7 +585,8 @@ let webApiListeners = {
         try {
             const request = JSON.parse(p.request);
             const endpoint = request[0];
-            const uid = await verifySessionToken(request[1]); // Should be the UserID from session token if valid, except for login endpoint.
+            const token = request[1];
+            const uid = await verifySessionToken(token); // Should be the UserID from session token if valid, except for login endpoint.
             if (endpoint === 'login'){
                 // Params
                 const username = request[1];
@@ -483,11 +607,12 @@ let webApiListeners = {
                     if (attemptedHash === realpwd){
                         // Let's generate a user session token and hand it to them.
                         const sessionToken = nanoid();
-                        const exp = Date.now() + 300000;
+                        const exp = Date.now() + 3.6e+6;
                         await sql`
                         INSERT INTO UserSessionToken(Token, IssuedDate, ExpireDate, UserID) VALUES
                         (${sessionToken}, ${Date.now()}, ${exp}, ${d[0].userid});
                         `;
+                        //console.log(await sql`SELECT * FROM UserSessionToken;`);
                         res.send(str({
                             status: 'OK',
                             token: sessionToken,
@@ -501,11 +626,26 @@ let webApiListeners = {
                     }
                 }
             }
-            else if (endpoint === 'getAllTasks'){
-                // Get all tasks across all groups,
-                // sort by due date.
-                console.log('UserID: ' + uid);
-                console.log(await getAllTasks(uid));
+            else if (endpoint === 'getClientPackageUpdate'){
+                // Update all general information for the app client.
+                // This includes tasks, groups, profile picture, attachments, etc.
+                // This is a very expensive API call, but easier to implement.
+                if (uid != -1){
+                    const tasks = await getAllTasks(uid);
+                    const selfUser = await getUser(uid, token);
+                    const groups = await getUserGroups(uid);
+                    res.send(str({
+                        tasks: tasks,
+                        groups: groups,
+                        me: selfUser
+                    }));
+                }
+                else{
+                    // Invalid API session key response.
+                    res.send(str({
+                        status: 'INVALID'
+                    }));
+                }
             }
             else{
                 res.send('Invalid API request format.');

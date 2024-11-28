@@ -79,7 +79,7 @@ TO-DO list app
         }
       }
 
-      const sessionToken = storage.read('sessionToken');
+      let sessionToken = storage.read('sessionToken');
 
       /**
        * Request against the API
@@ -116,10 +116,13 @@ TO-DO list app
           let status = val.status;
           if (status == 'OK'){
             // Let's save the session token.
+            sessionToken = val.token;
             storage.write('sessionToken', val.token);
             storage.write('sessionTokenExpires', val.expires);
             // Reload the page.
-            request(['getAllTasks', sessionToken]);
+            request(['getClientPackageUpdate', sessionToken]).then(data => {
+              console.log(data);
+            });
             //location.reload();
           }
           else if (status == 'INVALID'){
