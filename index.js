@@ -215,7 +215,7 @@ async function dbCheck(){
             Token VARCHAR(21) NOT NULL PRIMARY KEY,
             IssuedDate TIMESTAMP NOT NULL,
             ExpireDate TIMESTAMP,
-            UserID SERIAL NOT NULL,
+            UserID INT NOT NULL,
             FOREIGN KEY (UserID) REFERENCES Users(UserID)
                 ON DELETE CASCADE
                 ON UPDATE CASCADE
@@ -276,7 +276,7 @@ async function dbCheck(){
             GroupID INT,
             AttachmentID INT,
             Description TEXT,
-            Priority VARCHAR(15),
+            Priority INT,
             StartDate TIMESTAMP,
             EndDate TIMESTAMP,
             ScheduledDate TIMESTAMP,
@@ -414,6 +414,43 @@ async function dbCheck(){
     c.white('\n\n');
 }
 
+/**
+ * Verify that the session token is not expired, real, and 
+ * return the UserID if so.
+ * @param {string} sessionToken 
+ * @returns {int} UserID
+ */
+async function verifySessionToken(sessionToken){
+    // Let's clean the session token table by wiping expired ones.
+    await sql`
+        DELETE FROM UserSessionToken WHERE
+        ExpireDate <= ${Date.now()}
+    `;
+    // Let's query the session token table.
+    const res = await sql`
+        SELECT UserID FROM UserSessionToken WHERE 
+        Token = ${sessionToken} AND IssuedDate <= ${Date.now()} AND 
+        ExpireDate > ${Date.now()};
+    `;
+    if (res.length == 0 || res.length > 1){
+        return -1;
+    }
+    else{
+        return res[0].userid;
+    }
+}
+
+/**
+ * Get all tasks across all groups, sorted by due date.
+ * @param {*} userID 
+ */
+async function getAllTasks(userID){
+    // First let's query for all the groups we are in.
+    const res = await sql`SELECT GroupID FROM UserGroups WHERE 
+    UserID = ${userID}`;
+    console.log(res);
+}
+
 ///// WEB APIs /////
 // Format: route: (req, res) => ()
 let webApiListeners = {
@@ -425,6 +462,7 @@ let webApiListeners = {
         try {
             const request = JSON.parse(p.request);
             const endpoint = request[0];
+            const uid = await verifySessionToken(request[1]); // Should be the UserID from session token if valid, except for login endpoint.
             if (endpoint === 'login'){
                 // Params
                 const username = request[1];
@@ -463,8 +501,11 @@ let webApiListeners = {
                     }
                 }
             }
-            else if (endpoint === 'GetAllTasks'){
-                
+            else if (endpoint === 'getAllTasks'){
+                // Get all tasks across all groups,
+                // sort by due date.
+                console.log('UserID: ' + uid);
+                console.log(await getAllTasks(uid));
             }
             else{
                 res.send('Invalid API request format.');

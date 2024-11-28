@@ -79,6 +79,8 @@ TO-DO list app
         }
       }
 
+      const sessionToken = storage.read('sessionToken');
+
       /**
        * Request against the API
        * @param request Object
@@ -117,7 +119,8 @@ TO-DO list app
             storage.write('sessionToken', val.token);
             storage.write('sessionTokenExpires', val.expires);
             // Reload the page.
-            location.reload();
+            request(['getAllTasks', sessionToken]);
+            //location.reload();
           }
           else if (status == 'INVALID'){
             alert('The credentials are incorrect, please try again.');

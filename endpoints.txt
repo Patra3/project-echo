@@ -4,3 +4,4 @@
 -> return template
 
 ['login', username, password] -> {'status': 'OK', 'token' : 'abc', 'expires' : timestamp}
+['getAllTasks', token] -> {'status': 'OK'}
