@@ -486,7 +486,7 @@ async function getGroup(groupID){
 
 async function getUserGroups(userID){
     let res = await getAllUserGroups(userID);   
-    console.log(res);
+    //console.log(res);
     res = res.map(entry => getGroup(entry.groupid));
     res = await Promise.all(res);
     return res;
@@ -579,6 +579,9 @@ async function getUser(userID, sessionToken){
 let webApiListeners = {
     '/' : (req, res) => {
         res.sendFile(path.resolve('public/index.html'));
+    },
+    '/bundle.js' : (req, res) => {
+        res.sendFile(path.resolve('public/bundle.js'));
     },
     '/api/:request' : async (req, res) => {
         const p = req.params;
