@@ -14,6 +14,8 @@ TO-DO list app
     <meta name="keywords" content="todo,project,productivity">
     <meta name="author" content="Chen Z/Jason Z">
     <meta name="description" content="Powerful todo list.">
+    
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
 
     <!-- BOOTSTRAP -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
@@ -27,6 +29,9 @@ TO-DO list app
     <!-- BUFFER -->
     <script src="bundle.js"></script>
 
+    <!-- FEATHER -->
+    <script src="https://unpkg.com/feather-icons"></script>
+
     <style>
       * {
         font-family: "Parkinsans", sans-serif;
@@ -39,7 +44,7 @@ TO-DO list app
       }
       #profile-menu {
         cursor: pointer;
-        padding: 5px;
+        padding-right: 0.5rem;
       }
       #profile-menu:hover {
         border-radius: 20px;
@@ -58,6 +63,16 @@ TO-DO list app
       }
       .nav-item {
         cursor: pointer;
+      }
+      #viewSettingsBtn {  
+        border-style: solid;
+        border-width: 2px;
+        border-color: black;
+        float: right;
+      }
+      #viewSettingsBtn:hover {
+        background-color: black;
+        color: white;
       }
     </style>
   </head>
@@ -100,13 +115,14 @@ TO-DO list app
       <div id="main-page" class="page">
         <nav class="navbar fixed-bottom bg-body-tertiary">
           <div class="container-fluid">
-            <a class="navbar-brand navbar-right" href="#"><b>Project Echo</b>✔️</a>
+            <a class="navbar-brand navbar-right" href="#"><b>Project Echo</b>&nbsp;<i data-feather="check"></i></a>
             <button id="offcanvas-toggler" class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#navbar-offcanvas">
               <span class="navbar-toggler-icon"></span>
             </button>
+            <!-- main menu offcanvas -->
             <div class="offcanvas offcanvas-end" tabindex="-1" id="navbar-offcanvas">
               <div class="offcanvas-header">
-                <h5 id="profile-menu" class="offcanvas-title"><img class="self-pfp" style="width:3rem;border-radius:50%;">&nbsp; <span id="greeting">test</span></h5>
+                <h5 id="profile-menu" class="offcanvas-title" data-bs-dismiss="offcanvas"><img class="self-pfp" style="width:3rem;border-radius:50%;">&nbsp; <span id="greeting">test</span></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
               </div>
               <div class="offcanvas-body">
@@ -114,6 +130,9 @@ TO-DO list app
                 <ul class="nav nav-pills flex-column">
                   <li class="nav-item">
                     <a data-bs-dismiss="offcanvas" id="tasks-view-item" class="nav-link active" aria-current="page" onclick="changePage('tasks-view')">Tasks</a>
+                  </li>
+                  <li class="nav-item">
+                    <a data-bs-dismiss="offcanvas" id="filters-view-item" class="nav-link" aria-current="page" onclick="changePage('filters-view')">Filters</a>
                   </li>
                   <li class="nav-item">
                     <a data-bs-dismiss="offcanvas" id="vaults-view-item" class="nav-link" onclick="changePage('vaults-view')">Vaults</a>
@@ -138,12 +157,57 @@ TO-DO list app
         <br>
         <div class="container">
           <div>
-            <div id="tasks-view">
-              <h4>Tasks View</h4>
-              <p id="clock-statement">Clock: 8:13pm</p>
+            <div id="filters-view" class="views">
+              <h4>My filters</h4>
+              <p>Here you can add, edit and delete filters which will filter out tasks from your view depending on how you define it.</p>
+              
               <br>
-              <div class="btn-group" role="group">
-                
+              <div class="dropdown">
+                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"">
+                  Select a filter to edit or add
+                </button>
+                <ul class="dropdown-menu">
+                  <li><a class="dropdown-item">Action</a></li>
+                  <li><a class="dropdown-item">Another action</a></li>
+                  <li><a class="dropdown-item">Add new filter</a></li>
+                </ul>
+              </div><br><br>
+              <h6>Filter 1</h6>
+            </div>
+            <div id="tasks-view">
+              <div class="row">
+                <div class="col">
+                  <h4>Task View</h4>
+                  <p id="clock-statement">Clock: 8:13pm</p>
+                </div>
+                <div class="col">
+                  <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas">Task View settings</button>
+                </div>
+              </div>
+              <!-- task settings offcanvas -->
+              <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="taskSettingsOffcanvas">
+                <div class="offcanvas-header">
+                  <h5 class="offcanvas-title">Task view settings</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+                </div>
+                <div class="offcanvas-body">
+                  <form id="taskViewForm">
+                    <div class="mb-3">
+                      <label for="groupBySelector" class="form-label">Group tasks by: </label>
+                      <select name="groupBy" id="groupBySelector" form="taskViewForm" class="form-control">
+                        <option value="test">test</option>
+                      </select>
+                      <div class="form-text">Select how you want your tasks to be grouped together</div>
+                    </div>
+                    <div class="mb-3">
+                      <label for="orderBySelector" class="form-label">Order inside group: </label>
+                      <select name="orderBy" id="orderBySelector" form="taskViewForm" class="form-control">
+                        <option value="test">test</option>
+                      </select>
+                      <div class="form-text">Select how to order your tasks inside the groups</div>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
             <div id="vaults-view" class="views">
@@ -165,6 +229,8 @@ TO-DO list app
 
     <script>
 
+      feather.replace();
+
       window.setInterval(() => {
 
       }, 1000);
@@ -184,6 +250,7 @@ TO-DO list app
           if (newPage.includes('view')){
             gebi(`${currentPage}-item`).classList.remove('active');
             gebi(`${newPage}-item`).classList.add('active');
+            location.hash = newPage;
           }
           currentPage = newPage;
         }
@@ -211,6 +278,11 @@ TO-DO list app
       if (sessionToken != -1){
         changePage('main-page'); //main menu
         currentPage = 'tasks-view';
+        // This lets us keep the app page open on a refresh or bookmark
+        let locHash = location.hash.substring(1);
+        if (gebi(`${locHash}`) != null){
+          changePage(locHash);
+        }
         // Update.
         refreshClient();
       }

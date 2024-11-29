@@ -88,20 +88,6 @@ async function reset(){
     }
     
     try {
-        console.log(await sql`DROP TABLE TaskQueries CASCADE;`);
-    }
-    catch(e){
-        c.notice(e.message);
-    }
-
-    try {
-        console.log(await sql`DROP TABLE UserTasks CASCADE;`);
-    }
-    catch(e){
-        c.notice(e.message);
-    }
-
-    try {
         console.log(await sql`DROP TABLE UserGroups CASCADE;`);
     }
     catch(e){
@@ -332,49 +318,6 @@ async function dbCheck(){
             c.error('* ' + e);
         }
     }
-    // Create user tasks table
-    try {
-        await sql`CREATE TABLE UserTasks(
-            UserID INT NOT NULL,
-            TaskID INT NOT NULL,
-            PRIMARY KEY (UserID, TaskID),
-            FOREIGN KEY (UserID) REFERENCES Users(UserID)
-                ON DELETE CASCADE
-                ON UPDATE CASCADE,
-            FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID)
-                ON DELETE CASCADE
-                ON UPDATE CASCADE
-        );`
-        c.white('* UserTasks table created.');
-    }
-    catch(e){
-        if (e.message.includes('already exists')){
-            c.notice(`* UserTasks table already exists, skipping...`);
-        }
-        else{
-            c.error('* ' + e);
-        }
-    }
-    // Create task queries table    
-    try {
-        await sql`CREATE TABLE TaskQueries(
-            TaskQueryID SERIAL PRIMARY KEY,
-            UserID INT NOT NULL,
-            TaskQuery TEXT NOT NULL,
-            FOREIGN KEY (UserID) REFERENCES Users(UserID)
-                ON DELETE CASCADE
-                ON UPDATE CASCADE
-        );`
-        c.white('* TaskQueries table created.');
-    }
-    catch(e){
-        if (e.message.includes('already exists')){
-            c.notice(`* TaskQueries table already exists, skipping...`);
-        }
-        else{
-            c.error('* ' + e);
-        }
-    }
     // Create Tags table
     try {
         await sql`CREATE TABLE Tags(
@@ -582,6 +525,9 @@ let webApiListeners = {
     },
     '/bundle.js' : (req, res) => {
         res.sendFile(path.resolve('public/bundle.js'));
+    },
+    '/favicon.ico' : (req, res) => {
+        res.sendFile(path.resolve('favicon.ico'));
     },
     '/api/:request' : async (req, res) => {
         const p = req.params;
