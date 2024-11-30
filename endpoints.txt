@@ -6,3 +6,5 @@
 ['login', username, password] -> {'status': 'OK', 'token' : 'abc', 'expires' : timestamp}
 ['getClientPackageUpdate', token] -> {'status': 'OK', tasks: [...], groups: [...], me: {...}}
 ['createNewTag', token, groupID, tagName, tagColor] -> {'status': 'OK'}
+['updateTag', token, tagID, tagName, tagColor] -> {'status': 'OK'}
+['deleteTag', token, tagID, all = boolean] -> {'status': 'OK'}

@@ -76,7 +76,6 @@ TO-DO list app
         border-style: solid;
         border-width: 2px;
         border-color: black;
-        float: right;
       }
       #viewSettingsBtn:hover {
         background-color: black;
@@ -199,21 +198,11 @@ TO-DO list app
               <h6>Filter 1</h6>
             </div>
             <div id="tasks-view">
-              <div class="row">
-                <div class="col">
-                  <h4>Task View</h4>
-                  <p id="clock-statement">Clock: 8:13pm</p>
-                </div>
-                <div class="col">
-
-                </div>
-                <div class="col">
-                  <button id="" class="btn btn-primary" type="button" style="float:right;" data-bs-toggle="offcanvas" data-bs-target="#taskEditorOffcanvas">New Task</button>
-                </div>
-                <div class="col">
-                  <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas">Task View settings</button>
-                </div>
-              </div>
+              <h4>Task View</h4>
+              <p id="clock-statement">Clock: 8:13pm</p>
+              <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskEditorOffcanvas"><i data-feather="plus-circle"></i> &nbsp;New Task</button>
+              <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Task View settings</button>
+              
               <!-- new task offcanvas -->
               <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="taskEditorOffcanvas">
                 <div class="offcanvas-header">
@@ -230,12 +219,20 @@ TO-DO list app
                       <label for="task-description" class="form-label">Task Description</label>
                       <textarea class="form-control" id="task-description" name="task-description"></textarea>
                     </div>
+                    <div class="mb-3">
+                      <label for="task-duedate" class="form-label">Due At</label>
+                      <input type="datetime-local" class="form-control" id="task-duedate" name="task-duedate" required>
+                    </div>
                     <!-- this is dynamic -->
                     <div class="mb-3">
                       <label class="form-label" for="tda2">Task Tags</label>
                       <div class="form-control" id="tda2">
                         <div class="row row-col-7" id="task-tags"></div>
                       </div>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label" for="task-priority">Task Priority</label>
+                      <input type="number" max="5" min="1" step="1" value="1" class="form-control" id="task-priority" name="task-priority" required>
                     </div>
                   </form>
                 </div>
@@ -295,12 +292,24 @@ TO-DO list app
               </div>
             </div>
             <div id="tags-view" class="views">
-              <div class="offcanvas offcanvas-bottom" tabindex="-1" id="tagsEditOffcanvas">
+              <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="tagsEditOffcanvas">
                 <div class="offcanvas-header">
-                  <h5 class="offcanvas-title">Tetst</h5>
+                  <button type="button" class="btn btn-danger" id="tag2-delete">Delete tag</button>
                   <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
                 </div>
-                <div class="offcanvas-body">test123</div>
+                <div class="offcanvas-body">
+                  <form onsubmit="editTag();" action="javascript:void(0);">
+                    <div class="mb-3">
+                      <label for="tag2-name" class="form-label">Tag name</label>
+                      <input type="text" class="form-control" id="tag2-name" name="tag-name" required>
+                    </div>
+                    <div class="mb-3" style="position: relative;" id="tag2-anchor">
+                      <label for="tag2-color" class="form-label">Tag color</label><br>
+                      <input id="tag2-color" pattern="^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$" name="tag-color" type="text" class="form-control" required data-coloris>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Edit tag</button>
+                  </form><br><br><br><br>
+                </div>
               </div>
               <h4>Tags Editor</h4>
               <p>Tags are labels you can apply to your tasks, which help you group and organize them.<br>
@@ -327,7 +336,7 @@ TO-DO list app
                   </form>
                 </div>
               </div><br>
-              <button type="button" class="btn btn-danger w-100">Clear all tags</button>
+              <button type="button" class="btn btn-danger w-100" onclick="deleteTag(-1, true);">Clear all tags</button>
               <br><br><br><br>
             </div>
             <div id="people-view" class="views">
@@ -426,6 +435,49 @@ TO-DO list app
           }
         });
       }
+      
+      function deleteTag(tagId, all = false){
+        //console.log(tagId); 
+        let verifyCheck = false;
+        if (all){
+          verifyCheck = window.prompt(`Please enter "delete all" to confirm.`) === 'delete all' ? true : false;
+        }
+        else{
+          verifyCheck = window.prompt(`Please enter "delete" to confirm.`) === 'delete' ? true : false;
+        }
+        if (!verifyCheck){
+          alert('Nothing was deleted.');
+          return;
+        }
+        else{
+          request(['deleteTag', sessionToken, tagId, all]).then(data => {
+            if (data.status == 'ERROR' || data.status == 'INVALID'){
+              alert('An error has occurred. The app will restart now.');
+              storage.clear();
+            }
+            location.reload();
+          });
+        }
+      }
+
+      function editTag(){
+        if (currentEditingTag == null){
+          // We have nothing to edit
+          location.reload();
+        }
+        else{
+          let tagId = currentEditingTag;
+          currentEditingTag = null;
+          let newName = gebi('tag2-name').value, newColor = gebi('tag2-color').value;
+          request(['updateTag', sessionToken, tagId, newName, newColor]).then(data => {
+            if (data.status == 'ERROR' || data.status == 'INVALID'){
+              alert('An error has occurred. The app will restart now.');
+              storage.clear();
+            }
+            location.reload();
+          });
+        }
+      }
 
       /**
        * Returns true if the hex color is bright.
@@ -463,6 +515,7 @@ TO-DO list app
             location.reload();
           }
           else{
+            window.data = data;
             // Set our uid
             uid = data.me.userid;
             // Set pfp for every location.
@@ -485,11 +538,10 @@ TO-DO list app
             // Set vaults entries
             let vaultDom = gebi('vaults');
             vaultDom.innerHTML = '';
-            let currentGroup = null;
             data.groups.forEach(group => {
               let baseCard = document.createElement('div');
               if (currentVaultId === group.groupid){
-                currentGroup = group;
+                window.currentGroup = group;
               }
               baseCard.innerHTML = `
                   <div class="card">
@@ -516,19 +568,30 @@ TO-DO list app
             // Set tags in the task editor.
             let taskEditorList = gebi('tag-editor-list');
             taskEditorList.innerHTML = '';
-            let tags = currentGroup.tags;
-            console.log(tags);
-            if (tags.length === 0){
+            window.currentTags = window.currentGroup.tags;
+            console.log(window.currentTags);
+            let taskTags = gebi('task-tags');
+            taskTags.innerHTML = '';
+            if (window.currentTags.length === 0){
               // No tags
-              gebi('task-tags').innerHTML = `<div class="container">No tags found</div>`
+              taskTags.innerHTML = `<div class="container">No tags found</div>`;
             }
             else{
-              tags.forEach(tag => {
+              window.currentTags.forEach(tag => {
                 let dom = document.createElement('div');
                 dom.innerHTML = `
-                  <button onclick="renderTagEditor()" data-tagid="${tag.tagid}" type="button" class="btn w-100" style="border-radius:0;background-color: ${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</button>
+                  <button onclick="renderTagEditor(this.dataset.tagid)" data-tagid="${tag.tagid}" type="button" class="btn w-100" style="border-radius:0;background-color: ${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</button>
                 `;
                 taskEditorList.appendChild(dom);
+                
+                // now create the selectors for new task
+                dom = document.createElement('div');
+                dom.classList = 'col';
+                dom.innerHTML = `
+                  <input type="checkbox" class="checkbox-round" id="task-tag-number${tag.tagid}" name="task-tag-number${tag.tagid}" value="${tag.tagname}">
+                  <label for="task-tag-number${tag.tagid}" style="margin-top:5px;white-space:nowrap;cursor:pointer;padding:0.25rem;padding-left:0.40rem;padding-right:0.40rem;border-radius:25px;background-color:${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</label><br>
+                `;
+                taskTags.appendChild(dom);
               });
               taskEditorList.style.display = 'none';
               taskEditorList.style.display = 'block';
@@ -546,12 +609,30 @@ TO-DO list app
           }
         });
       }
-
-      function renderTagEditor(){
+      let currentEditingTag = null;
+      function renderTagEditor(id){
         let offcanvas = gebi('tagsEditOffcanvas');
         let b = new bootstrap.Offcanvas(offcanvas);
+        offcanvas.addEventListener('hide.bs.offcanvas', () => {
+          // A solution for bug that the color picker no longer works on add new tag.
+          location.reload();
+        });
         b.show();
-        // TODO: Update its components inside
+        let o = gebi('tag2-color');
+        let del = gebi('tag2-delete');
+        del.onclick = () => {deleteTag(currentEditingTag)};
+        window.currentTags.forEach(tag => {
+          if (tag.tagid == id){
+            gebi('tag2-name').value = tag.tagname;
+            o.value = tag.tagcolor;
+            o.dispatchEvent(new Event('input', { bubbles: true }));
+          }
+        });
+        Coloris({
+          parent: gebi('tag2-anchor'),
+          el: gebi('tag2-color')
+        });
+        currentEditingTag = id;
       }
 
       /**

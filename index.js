@@ -564,6 +564,21 @@ let webApiListeners = {
     '/api/:request' : async (req, res) => {
         const p = req.params;
         try {
+            res.sendError = () => {
+                res.send(str({
+                    status: 'ERROR'
+                }));
+            }
+            res.sendOK = () => {
+                res.send(str({
+                    status: 'OK'
+                }));
+            }
+            res.sendInvalid = () => {
+                res.send(str({
+                    status: 'INVALID'
+                }));
+            }
             const request = JSON.parse(p.request);
             const endpoint = request[0];
             const token = request[1];
@@ -575,9 +590,7 @@ let webApiListeners = {
                 // Let's try it against the known DB entries.
                 const d = await sql`SELECT PasswordHash, PasswordSalt, UserID from Users where Username = ${username}`;
                 if (d.length <= 0){
-                    res.send(str({
-                        status: 'INVALID'
-                    }));
+                    res.sendInvalid();
                     return;
                 }
                 else{
@@ -601,9 +614,7 @@ let webApiListeners = {
                         }));
                     }
                     else{
-                        res.send(str({
-                            status: 'INVALID'
-                        }));
+                        res.sendInvalid();
                     }
                 }
             }
@@ -633,9 +644,7 @@ let webApiListeners = {
                 }
                 else{
                     // Invalid API session key response.
-                    res.send(str({
-                        status: 'INVALID'
-                    }));
+                    res.sendInvalid();
                 }
             }
             else if (endpoint === 'createNewTag'){
@@ -646,22 +655,70 @@ let webApiListeners = {
                             INSERT INTO Tags (TagName, TagColor, GroupID) VALUES
                             (${tagName}, ${tagColor}, ${groupId});
                         `;
-                        res.send(str({
-                            status: 'OK'
-                        }));
+                        res.sendOK();
                     }
                     catch(e){
                         c.error(e);
-                        res.send(str({
-                            status: 'ERROR'
-                        }));
+                        res.sendError();
                     }
                 }
                 else{
                     // Invalid API session key response.
-                    res.send(str({
-                        status: 'INVALID'
-                    }));
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'updateTag'){
+                if (uid != -1){
+                    let tagId = request[2], tagName = request[3], tagColor = request[4];
+                    try {
+                        await sql`
+                            UPDATE Tags
+                            SET TagName = ${tagName}, TagColor = ${tagColor}
+                            WHERE TagID = ${tagId};
+                        `;
+                        res.sendOK();
+                    }
+                    catch(e) {
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    // Invalid API session key response.
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'deleteTag'){
+                if (uid != -1){
+                    let tagId = request[2], deleteAll = request[3];
+                    if (deleteAll === true){
+                        try {
+                            await sql`
+                                DELETE FROM Tags;
+                            `;
+                            res.sendOK();
+                        }
+                        catch(e){
+                            c.error(e);
+                            res.sendError();
+                        }
+                    }
+                    else{
+                        try {
+                            await sql`
+                                DELETE FROM Tags WHERE TagID = ${tagId}
+                            `;
+                            res.sendOK();
+                        }
+                        catch(e){
+                            c.error(e);
+                            res.sendError();
+                        }
+                    }
+                }
+                else{
+                    // Invalid API session key response.
+                    res.sendInvalid();
                 }
             }
             else{
