@@ -4,4 +4,5 @@
 -> return template
 
 ['login', username, password] -> {'status': 'OK', 'token' : 'abc', 'expires' : timestamp}
-['getAllTasks', token] -> {'status': 'OK'}
+['getClientPackageUpdate', token] -> {'status': 'OK', tasks: [...], groups: [...], me: {...}}
+['createNewTag', token, groupID, tagName, tagColor] -> {'status': 'OK'}

@@ -81,6 +81,13 @@ async function reset(){
     }
 
     try {
+        console.log(await sql`DROP TABLE TagsTables CASCADE;`);
+    }
+    catch(e){
+        c.notice(e.message);
+    }
+
+    try {
         console.log(await sql`DROP TABLE Tags CASCADE;`);
     }
     catch(e){
@@ -321,14 +328,39 @@ async function dbCheck(){
     // Create Tags table
     try {
         await sql`CREATE TABLE Tags(
-            TaskID INT,
+            TagID SERIAL NOT NULL PRIMARY KEY,
             TagName TEXT NOT NULL,
-            PRIMARY KEY (TaskID, TagName),
-            FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID)
+            TagColor VARCHAR(7) NOT NULL,
+            GroupID INT NOT NULL,
+            FOREIGN KEY (GroupID) REFERENCES Groups(GroupID)
                 ON UPDATE CASCADE
                 ON DELETE CASCADE
         );`
         c.white('* Tags table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* Tags table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
+    
+    // Create TagsTables table
+    try {
+        await sql`CREATE TABLE TagsTables(
+            TagID INT NOT NULL,
+            TaskID INT NOT NULL,
+            PRIMARY KEY (TagID, TaskID),
+            FOREIGN KEY (TagID) REFERENCES Tags(TagID)
+                ON UPDATE CASCADE
+                ON DELETE CASCADE,
+            FOREIGN KEY (TaskID) REFERENCES Tasks(TaskID)
+                ON UPDATE CASCADE
+                ON DELETE CASCADE
+        );`
+        c.white('* TagsTable table created.');
     }
     catch(e){
         if (e.message.includes('already exists')){
@@ -404,7 +436,7 @@ async function getAllUserGroups(userID){
     if (res.length == 0){
         // We need to create a default group, and also add to UserGroups this relation.
         const t = await sql`INSERT INTO Groups(AdminID, GroupName) 
-        VALUES (${userID}, 'Personal') RETURNING GroupID;`;
+        VALUES (${userID}, 'Personal Vault') RETURNING GroupID;`;
         const groupID = t[0].groupid;
         await sql`INSERT INTO UserGroups(UserID, GroupID)
         VALUES (${userID}, ${groupID})`
@@ -582,12 +614,48 @@ let webApiListeners = {
                 if (uid != -1){
                     const tasks = await getAllTasks(uid);
                     const selfUser = await getUser(uid, token);
-                    const groups = await getUserGroups(uid);
+                    let bigGroups = await sql`
+                        SELECT * FROM UserGroups INNER JOIN Groups ON 
+                        Groups.GroupID = UserGroups.GroupID
+                         WHERE UserGroups.UserID = ${uid};
+                    `;
+                    for (let i = 0; i < bigGroups.length; i++){
+                        bigGroups[i].tags = await sql`
+                            SELECT * FROM Tags WHERE GroupID = ${bigGroups[i].groupid} ORDER BY TagName;
+                        `;
+                    }
                     res.send(str({
+                        status: 'OK',
+                        me: selfUser,
                         tasks: tasks,
-                        groups: groups,
-                        me: selfUser
+                        groups: bigGroups
                     }));
+                }
+                else{
+                    // Invalid API session key response.
+                    res.send(str({
+                        status: 'INVALID'
+                    }));
+                }
+            }
+            else if (endpoint === 'createNewTag'){
+                if (uid != -1){
+                    let groupId = request[2], tagName = request[3], tagColor = request[4];
+                    try {
+                        await sql`
+                            INSERT INTO Tags (TagName, TagColor, GroupID) VALUES
+                            (${tagName}, ${tagColor}, ${groupId});
+                        `;
+                        res.send(str({
+                            status: 'OK'
+                        }));
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.send(str({
+                            status: 'ERROR'
+                        }));
+                    }
                 }
                 else{
                     // Invalid API session key response.
