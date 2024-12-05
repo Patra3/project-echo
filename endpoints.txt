@@ -8,3 +8,6 @@
 ['createNewTag', token, groupID, tagName, tagColor] -> {'status': 'OK'}
 ['updateTag', token, tagID, tagName, tagColor] -> {'status': 'OK'}
 ['deleteTag', token, tagID, all = boolean] -> {'status': 'OK'}
+['createNewTask', token, taskName, dueDateTimestamp, taskPriority] -> {'status': 'OK'}
+['updateFilter', token] (rest in POST body) -> {'status' : 'OK'}
+['deleteFilter', token, filterID] -> {'status' : 'OK' }

@@ -13,6 +13,7 @@ import fs from 'fs';
 
 // Host our web app and define our APIs
 const app = express();
+app.use(express.json({limit: '1gb'})); // Set max attachment file size here.
 const port = 8080;
 
 console.clear();
@@ -138,6 +139,7 @@ async function reset(){
 
     try {
         console.log(await sql`DROP TABLE Attachments CASCADE;`);
+        fs.rmSync(path.resolve('attachments'), {recursive: true, force: true});
     }
     catch(e){
         c.notice(e.message);
@@ -171,6 +173,7 @@ async function dbCheck(){
             c.boldDanger(' This app requires SERIAL type to start at 1, please adjust your table settings and try again. ');
             process.exit();
         }
+        fs.mkdirSync(path.resolve('attachments'));
         c.white('* Attachments table created.');
         c.white('   * Default attachments loaded.');
     }
@@ -234,26 +237,6 @@ async function dbCheck(){
             c.error('* ' + e);
         }
     }
-    // Create TaskViews (TaskQueries) table
-    try {
-        await sql`CREATE TABLE TaskViews(
-            TaskViewID SERIAL PRIMARY KEY,
-            UserID INT NOT NULL,
-            TaskQuery TEXT NOT NULL,
-            FOREIGN KEY (UserID) REFERENCES Users(UserID)
-                ON DELETE CASCADE
-                ON UPDATE CASCADE
-        );`
-        c.white('* TaskViews table created.');
-    }
-    catch(e){
-        if (e.message.includes('already exists')){
-            c.notice(`* TaskViews table already exists, skipping...`);
-        }
-        else{
-            c.error('* ' + e);
-        }
-    }
     // Create Groups table
     try {
         await sql`CREATE TABLE Groups(
@@ -272,11 +255,41 @@ async function dbCheck(){
             c.error('* ' + e);
         }
     }
+    // Create TaskViews (TaskQueries) table
+    try {
+        await sql`CREATE TABLE TaskViews(
+            TaskViewID SERIAL PRIMARY KEY,
+            FilterName TEXT,
+            TagQuery TEXT,
+            VaultID INT NOT NULL,
+            SortBy TEXT,
+            GroupBy TEXT,
+            DescIncludes TEXT,
+            TitleIncludes TEXT,
+            TagIncludes TEXT,
+            IsDone BOOLEAN,
+            IsNotDone BOOLEAN,
+            StartDate TIMESTAMP,
+            EndDate TIMESTAMP,
+            FOREIGN KEY (VaultID) REFERENCES Groups(GroupID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
+        );`
+        c.white('* TaskViews table created.');
+    }
+    catch(e){
+        if (e.message.includes('already exists')){
+            c.notice(`* TaskViews table already exists, skipping...`);
+        }
+        else{
+            c.error('* ' + e);
+        }
+    }
     // Create Tasks table
     try {
         await sql`CREATE TABLE Tasks(
             TaskID SERIAL NOT NULL PRIMARY KEY,
-            TaskStatus VARCHAR(20),
+            TaskName TEXT,
             GroupID INT,
             AttachmentID INT,
             Description TEXT,
@@ -549,6 +562,26 @@ async function getUser(userID, sessionToken){
     return b;
 }
 
+async function getFilters(groupID){
+    const filters = await sql`
+        SELECT * FROM TaskViews WHERE VaultID = ${groupID};
+    `;
+    return filters;
+}
+
+/**
+ * Basicaly fs.writeFileSync wrapper.
+ * @param {string} file extension 
+ * @param {*} data binary data or string
+ * @returns {string} random file name as needed.
+ */
+function writeAttachment(ext, data){
+    let rndFilename = nanoid() + `.${ext}`;
+    let fullPath = path.resolve(`attachments/${rndFilename}`);
+    fs.writeFileSync(fullPath, data);
+    return fullPath;
+}
+
 ///// WEB APIs /////
 // Format: route: (req, res) => ()
 let webApiListeners = {
@@ -634,6 +667,9 @@ let webApiListeners = {
                         bigGroups[i].tags = await sql`
                             SELECT * FROM Tags WHERE GroupID = ${bigGroups[i].groupid} ORDER BY TagName;
                         `;
+                    }
+                    for (let i = 0; i < bigGroups.length; i++){
+                        bigGroups[i].filters = await getFilters(bigGroups[i].groupid);
                     }
                     res.send(str({
                         status: 'OK',
@@ -721,6 +757,151 @@ let webApiListeners = {
                     res.sendInvalid();
                 }
             }
+            else if (endpoint === 'createNewTask'){
+                if (uid != -1){
+                    let taskName = request[2], dueDate = request[3], taskPrio = request[4];
+                    // Here we put the attachment and tags data in the request body.
+                    let tags = req.body.tags, attachments = req.body.attachments, desc = req.body.desc;
+                    if (!desc){
+                        desc = '';
+                    }
+                    //console.log(desc);
+                    try {
+                        // Try to insert into the Tasks table.
+                        /**
+                         * 
+                                CREATE TABLE Attachments(
+                                    AttachmentID SERIAL PRIMARY KEY,
+                                    FileName TEXT NOT NULL,
+                                    DateAdded TIMESTAMP NOT NULL,
+                                    ModifiedDate TIMESTAMP NOT NULL,
+                                    FilePath TEXT NOT NULL
+                                );
+                         */
+                        let ultimateFileId = null;
+                        let attachmentIdArray = [];
+                        for (let fileName in attachments){
+                            // Write file to attachments folder under a random name.
+                            let fpath = writeAttachment(fileName.split('.')[1], Buffer.from(attachments[fileName].hexData, 'hex'));
+                            // Let's enter it into the attachments table.
+                            const fid = (await sql`
+                                INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) 
+                                VALUES (${fileName}, ${Date.now()}, ${new Date(attachments[fileName].lastModified)}, ${fpath})
+                                RETURNING AttachmentID;
+                            `)[0].attachmentid;
+                            // Get the attachmentid serial
+                            attachmentIdArray.push(fid);
+                        }
+                        if (attachmentIdArray.length > 1){
+                            // More than 1 file was inserted, we need to make another file with the ids.
+                            let fpath = writeAttachment('txt', JSON.stringify(attachmentIdArray));
+                            const fid = (await sql`
+                                INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) 
+                                VALUES (${'attachments.txt'}, ${Date.now()}, ${Date.now()}, ${fpath})
+                                RETURNING AttachmentID;
+                                `)[0].attachmentid;
+                            ultimateFileId = fid;
+                        }
+                        else if (attachmentIdArray.length == 1){
+                            // Only 1 file was uploaded, we can proceed with task.
+                            ultimateFileId = attachmentIdArray[0];
+                        }
+                        /**
+                         * Tasks(
+                            TaskID SERIAL NOT NULL PRIMARY KEY,
+                            GroupID INT,
+                            AttachmentID INT,
+                            Description TEXT,
+                            Priority INT,
+                            DueDate TIMESTAMP,
+                            CreatedDate TIMESTAMP,
+                            CompletedDate TIMESTAMP,
+                            ArchivedDate TIMESTAMP,
+                            FOREIGN KEY (GroupID) REFERENCES Groups(GroupID)
+                                ON DELETE CASCADE
+                                ON UPDATE CASCADE,
+                            FOREIGN KEY (AttachmentID) REFERENCES Attachments(AttachmentID)
+                                ON DELETE CASCADE
+                                ON UPDATE CASCADE
+                            )
+                         */
+                        // We can make the Task entry now.
+                        const taskid = (await sql`
+                            INSERT INTO Tasks(GroupID, TaskName, AttachmentID, Description, Priority, DueDate, CreatedDate)
+                            VALUES (${req.body.groupid}, ${taskName}, ${ultimateFileId}, ${desc}, ${taskPrio}, ${dueDate}, ${Date.now()})
+                            RETURNING TaskID;
+                        `)[0].taskid;
+                        // Let's add to the TaskTags table.
+                        for (let i = 0; i < tags.length; i++){
+                            await sql`
+                                INSERT INTO TagsTables(TaskID, TagID) VALUES (${taskid}, ${tags[i]});
+                            `;
+                        }
+                        res.sendOK();
+                    }
+                    catch(e) {
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    // Invalid API session key response.
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'updateFilter'){
+                if (uid != -1){
+                   let data = req.body;
+                   try {
+                       if (data.filterId === -1){
+                        // INSERT
+                        await sql`
+                            INSERT INTO TaskViews
+                            (FilterName, VaultID, SortBy, GroupBy, DescIncludes, TitleIncludes, TagIncludes, IsDone, IsNotDone, StartDate, EndDate)
+                            VALUES
+                            (${data.filterName}, ${data.vaultid}, ${data.sortBy}, ${data.groupBy}, ${data.descincludes}, ${data.titleincludes}, ${data.tagincludes}, ${data.isdone}, ${data.isnotdone}, ${data.startdate}, ${data.enddate});
+                        `;
+                        res.sendOK();
+                       }
+                       else{
+                        // UPDATE
+                        await sql`
+                            UPDATE TaskViews
+                            SET FilterName = ${data.filterName}, SortBy = ${data.sortBy}, GroupBy = ${data.groupBy}, 
+                            DescIncludes = ${data.descincludes}, TitleIncludes = ${data.titleincludes}, TagIncludes = ${data.tagincludes},
+                            IsDone = ${data.isdone}, IsNotDone = ${data.isnotdone}, StartDate = ${data.startdate}, EndDate = ${data.enddate}
+                            WHERE VaultID = ${data.vaultid};
+                        `;
+                        res.sendOK();
+                       }
+                   }
+                   catch (e){
+                    c.error(e);
+                    res.sendError();
+                   }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'deleteFilter'){
+                if (uid != -1){
+                    let deleteId = request[2];
+                    try {
+                        await sql`
+                            DELETE FROM TaskViews WHERE TaskViewID = ${deleteId};
+                        `;
+                        res.sendOK();
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
             else{
                 res.send('Invalid API request format.');
             }
@@ -733,7 +914,12 @@ let webApiListeners = {
 };
 // Register each route => callback to Express
 for (let key in webApiListeners){
-    app.get(key, webApiListeners[key]);
+    if (key == `/api/:request`){
+        app.post(key, webApiListeners[key]);
+    }
+    else{
+        app.get(key, webApiListeners[key]);
+    }
 }
 
 process.on('SIGINT', () => {

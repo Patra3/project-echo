@@ -97,6 +97,18 @@ TO-DO list app
       .checkbox-round:checked {
         background-color: gray;
       }
+
+      ::-webkit-scrollbar {
+        width: 9px;
+      }
+      ::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      ::-webkit-scrollbar-thumb {
+        background-color: rgba(155, 155, 155, 0.5);
+        border-radius: 20px;
+        border: transparent;
+      }
     </style>
   </head>
   <body>
@@ -181,27 +193,327 @@ TO-DO list app
         <div class="container">
           <div>
             <div id="filters-view" class="views">
-              <h4>My filters</h4>
+              <h4>Filter Editor</h4>
               <p>Here you can add, edit and delete filters which will filter out tasks from your view depending on how you define it.</p>
               
               <br>
               <div class="dropdown">
-                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown"">
+                <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
                   Select a filter to edit or add
                 </button>
-                <ul class="dropdown-menu">
+                <ul class="dropdown-menu" id="filters-edit-list"></ul>
+              </div><br><br>
+              <div class="card">
+                <div class="card-header" id="filter-title">
+                  Editing Filter 1
+                </div>
+                <script>
+                  // Script for filter form dynamics.
+                  // This is just here for ease of development.
+                  
+                  let cef, cvf;
+
+                  // update selects
+                  function updateFilterPage(){
+                    /*
+                    await sql`CREATE TABLE TaskViews(
+                      TaskViewID SERIAL PRIMARY KEY,
+                      FilterName TEXT,
+                      VaultID INT NOT NULL,
+                      SortBy TEXT,
+                      GroupBy TEXT,
+                      DescIncludes TEXT,
+                      TitleIncludes TEXT,
+                      TagIncludes TEXT,
+                      IsDone BOOLEAN,
+                      IsNotDone BOOLEAN,
+                      StartDate TIMESTAMP,
+                      EndDate TIMESTAMP,
+                      FOREIGN KEY (UserID) REFERENCES Users(UserID)
+                          ON DELETE CASCADE
+                          ON UPDATE CASCADE
+                    );`
+                    */
+                    /*
                   <li><a class="dropdown-item">Action</a></li>
                   <li><a class="dropdown-item">Another action</a></li>
                   <li><a class="dropdown-item">Add new filter</a></li>
-                </ul>
-              </div><br><br>
-              <h6>Filter 1</h6>
+
+                    */
+
+                    // Add new group
+                    window.currentGroup.filters.push({
+                      descincludes: null,
+                      enddate: null,
+                      filtername: 'Add new filter',
+                      groupby: 'day',
+                      sortby: 'duedate',
+                      startdate: null,
+                      tagincludes: null,
+                      tagquery: null,
+                      taskviewid: -1,
+                      titleincludes: null,
+                      vaultid: window.currentGroup.groupid
+                    });
+
+
+                    let flist = gebi('filters-edit-list');
+                    flist.innerHTML = '';
+                    let g = gebi('taskview-filter');
+                    g.innerHTML = '';
+                    window.currentGroup.filters.forEach(filter => {
+                      let dom = document.createElement('LI');
+                      dom.innerHTML = `
+                        <a class="dropdown-item">${filter.filtername}</a>
+                      `;
+                      dom.onclick = () => {
+                        cef = filter;
+                        updateFilterForm();
+                      };
+                      dom.style.cursor = 'pointer';
+                      flist.appendChild(dom);
+
+
+                      // Let's also put it in the task viewer
+                      if (filter.filtername != 'Add new filter'){
+                        let bb = document.createElement('OPTION');
+                        bb.value = filter.taskviewid;
+                        bb.innerHTML = filter.filtername;
+                        g.innerHTML += bb.outerHTML;
+                      }
+                    });
+
+                    // Are there no filters? This is expected
+                    // for a first time user to run.
+                    if (window.currentGroup.filters.length === 1){
+                      request(['updateFilter', sessionToken], true, {
+                        filterId: -1,
+                        filterName: 'Default',
+                        vaultid: window.currentGroup.groupid,
+                        sortBy: 'duedate',
+                        groupBy: 'day',
+                        descincludes: null,
+                        titleincludes: null,
+                        tagincludes: null,
+                        isdone: false,
+                        isnotdone: true,
+                        startdate: null,
+                        enddate: null,
+                      }).then(data => {
+                        location.reload();
+                      });
+                      return;
+                    }
+
+                    // Let's find the Default filter and set it to the one we are editing.
+                    window.currentGroup.filters.forEach(filter => {
+                      if (filter.filtername === 'Default'){
+                        cef = filter;
+                        cvf = filter;
+                      }
+                    });
+                    if (!cef){
+                      cef = window.currentGroup.filters[0];
+                    }
+
+                    updateFilterForm();
+                  }
+                  function updateFilterForm(){
+                    gebi('filter-title').innerHTML = `Editing <b>${cef.taskviewid === -1 ? 'New' : cef.filtername }</b> filter`;
+                    let a = gebi('filter-name');
+                    if (!(cef.taskviewid === -1)){
+                      a.value = cef.filtername;
+                      a.placeholder = '';
+                    }
+                    else{
+                      a.value = '';
+                      a.placeholder = 'Filter name';
+                    }
+                    gebi('filter-groupby').value = cef.groupby;
+                    gebi('filter-sortby').value = cef.sortby;
+                    gebi('filter-descincludes').value = cef.descincludes;
+                    gebi('filter-titleincludes').value = cef.titleincludes;
+                    let s = gebi('filter-startdate'), e = gebi('filter-enddate');
+                    if (cef.startdate != null){
+                      s.value = new Date(cef.startdate).toISOString().slice(0, 16);
+                    }
+                    else{
+                      s.value = "";
+                    }
+                    if (cef.enddate != null){
+                      e.value = new Date(cef.enddate).toISOString().slice(0, 16);
+                    }
+                    else{
+                      e.value = "";
+                    }
+
+                    // set the checkboxes
+                    let v = gebi('filter-isdone'), x = gebi('filter-isnotdone');
+                    if (cef.isdone){
+                      v.checked = true;
+                    }
+                    else{
+                      v.checked = false;
+                    }
+                    if (cef.isnotdone){
+                      x.checked = true;
+                    }
+                    else{
+                      x.checked = false;
+                    }
+
+                    // Update our exclude tags checkboxes.
+                    if (cef.tagincludes){
+                      cef.tagincludes.split(',').forEach(tagId => {
+                        let a = gebi(`filter-tag-number${tagId}`);
+                        if (a){
+                          a.checked = true;
+                        }
+                        else{
+                          // There is a garbage tag here somewhere (tag deleted)
+                          // Let's force update the filter.
+                          updateCurrentFilter();
+                        }
+                      });
+                    }
+                  }
+
+                  function updateCurrentFilter(){
+                    /*
+                    {
+                        filterId: -1,
+                        filterName: 'Default',
+                        vaultid: window.currentGroup.groupid,
+                        sortBy: 'duedate',
+                        groupBy: 'day',
+                        descincludes: null,
+                        titleincludes: null,
+                        tagincludes: null,
+                        isdone: false,
+                        isnotdone: true,
+                        startdate: null,
+                        enddate: null,
+                      }
+                    */
+                    console.log(FormHero.extractFormContent('filter-form'))
+                    let data = FormHero.extractFormContent('filter-form');
+                    if (data.startdate == ''){
+                      data.startdate = null;
+                    }
+                    if (data.enddate == ''){
+                      data.enddate = null;
+                    }
+                    let craft = {
+                      filterId: cef.taskviewid,
+                      filterName: data.name,
+                      vaultid: window.currentGroup.groupid,
+                      sortBy: data.sortby,
+                      groupBy: data.groupby,
+                      descincludes: data.descincludes,
+                      titleincludes: data.titleincludes,
+                      tagincludes: data.checkedTagIds,
+                      isdone: data.isdone,
+                      isnotdone: data.isnotdone,
+                      startdate: data.startdate,
+                      enddate: data.enddate
+                    };
+                    console.log(craft);
+                    request(['updateFilter', sessionToken], true, craft).then(d => {
+                      if (d.status == 'OK'){
+                        location.reload();
+                      }
+                      else{
+                        alert('An error has occurred.');
+                        location.reload();
+                      }
+                    });
+                  }
+
+                  function deleteFilter(){
+                    if (window.currentGroup.filters.length == 2){
+                      alert('You cannot delete the last filter. Please make another filter before deleting this one.');
+                      return;
+                    }
+                    if (confirm('Are you certain you want to delete?')) {
+                      request(['deleteFilter', sessionToken, cef.taskviewid]).then(data => {
+                        if (data.status === 'OK'){
+                          alert(`Successfully deleted ${cef.filtername} filter.`);
+                          location.reload();
+                        }
+                      });
+                    }
+                    else{
+                      alert('Nothing has been deleted.');
+                    }
+                  }
+
+                </script>
+                <div class="card-body">
+                  <form id="filter-form" action="javascript:void(0);" onsubmit="updateCurrentFilter()">
+                    <div class="mb-3">
+                      <label for="filter-name" class="form-label">Filter Name</label>
+                      <input type="text" id="filter-name" name="filter-name" class="form-control" required>
+                    </div>
+                    <!-- dynamic -->
+                    <div class="mb-3">
+                      <label class="form-label" for="tda3">Exclude Tags</label>
+                      <div class="form-control" id="tda3">
+                        <div class="row row-col-7" id="filter-tags"></div>
+                      </div>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label" for="filter-groupby">Group by</label>
+                      <select id="filter-groupby" name="filter-groupby" class="form-control">
+                        <option value="day">Day</option>
+                        <option value="week">Week</option>
+                        <option value="month">Month</option>
+                        <option value="year">Year</option>
+                        <option value="tags">Tags</option>
+                      </select>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label" for="filter-sortby">Sort by</label>
+                      <select id="filter-sortby" name="filter-sortby" class="form-control">
+                        <option value="priority">Priority</option>
+                        <option value="title">Title (Alphabetical)</option>
+                        <option value="duedate">Due Date</option>
+                      </select>
+                    </div>
+                    <div class="mb-3">
+                      <input type="checkbox" id="filter-isdone" name="filter-isdone">
+                      <label for="filter-isdone" class="form-label">Is completed</label>&nbsp;
+                      <input type="checkbox" id="filter-isnotdone" name="filter-isnotdone">
+                      <label for="filter-isnotdone" class="form-label">Is not completed</label>
+                    </div>
+                    <div class="mb-3">
+                      <label for="filter-descincludes" class="form-label">Description includes</label>
+                      <input type="text" id="filter-descincludes" name="filter-descincludes" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                      <label for="filter-titleincludes" class="form-label">Title includes</label>
+                      <input type="text" id="filter-titleincludes" name="filter-titleincludes" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                      <label for="filter-startdate" class="form-label">Start Date</label>
+                      <input type="datetime-local" id="filter-startdate" name="filter-startdate" class="form-control">
+                    </div>
+                    <div class="mb-3">
+                      <label for="filter-enddate" class="form-label">End Date</label>
+                      <input type="datetime-local" id="filter-enddate" name="filter-enddate" class="form-control">
+                    </div><br>
+                    <button type="submit" class="btn btn-primary">Confirm</button>
+                  </form>
+                </div>
+              </div>
+              <br>
+              <button type="button" class="btn btn-danger" onclick="deleteFilter();">Delete filter</button>
+              <br><br><br><br>
             </div>
             <div id="tasks-view">
               <h4>Task View</h4>
               <p id="clock-statement">Clock: 8:13pm</p>
               <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskEditorOffcanvas"><i data-feather="plus-circle"></i> &nbsp;New Task</button>
-              <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Task View settings</button>
+              <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Apply Filter</button>
               
               <!-- new task offcanvas -->
               <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="taskEditorOffcanvas">
@@ -210,10 +522,10 @@ TO-DO list app
                   <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
                 </div>
                 <div class="offcanvas-body">
-                  <form>
+                  <form onsubmit="createNewTask()" action="javascript:void(0);">
                     <div class="mb-3">
                       <label for="task-name" class="form-label">Task Name</label>
-                      <input type="text" class="form-control" id="task-name" name="task-name">
+                      <input type="text" class="form-control" id="task-name" name="task-name" required>
                     </div>
                     <div class="mb-3">
                       <label for="task-description" class="form-label">Task Description</label>
@@ -221,7 +533,7 @@ TO-DO list app
                     </div>
                     <div class="mb-3">
                       <label for="task-duedate" class="form-label">Due At</label>
-                      <input type="datetime-local" class="form-control" id="task-duedate" name="task-duedate" required>
+                      <input type="datetime-local" class="form-control" id="task-duedate" name="task-duedate">
                     </div>
                     <!-- this is dynamic -->
                     <div class="mb-3">
@@ -234,6 +546,11 @@ TO-DO list app
                       <label class="form-label" for="task-priority">Task Priority</label>
                       <input type="number" max="5" min="1" step="1" value="1" class="form-control" id="task-priority" name="task-priority" required>
                     </div>
+                    <div class="mb-3">
+                      <label class="form-label" for="task-attachments">Add Attachments</label>
+                      <input type="file" class="form-control" id="task-attachments" name="task-attachments" multiple>
+                    </div><br>
+                    <button id="task-editor-btn" type="submit" class="btn btn-primary">Create Task</button>
                   </form>
                 </div>
               </div>
@@ -245,24 +562,14 @@ TO-DO list app
               <!-- task settings offcanvas -->
               <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="taskSettingsOffcanvas">
                 <div class="offcanvas-header">
-                  <h5 class="offcanvas-title">Task view settings</h5>
+                  <h5 class="offcanvas-title">Apply a filter</h5>
                   <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
                 </div>
                 <div class="offcanvas-body">
                   <form id="taskViewForm">
                     <div class="mb-3">
-                      <label for="groupBySelector" class="form-label">Group tasks by: </label>
-                      <select name="groupBy" id="groupBySelector" form="taskViewForm" class="form-control">
-                        <option value="test">test</option>
-                      </select>
-                      <div class="form-text">Select how you want your tasks to be grouped together</div>
-                    </div>
-                    <div class="mb-3">
-                      <label for="orderBySelector" class="form-label">Order inside group: </label>
-                      <select name="orderBy" id="orderBySelector" form="taskViewForm" class="form-control">
-                        <option value="test">test</option>
-                      </select>
-                      <div class="form-text">Select how to order your tasks inside the groups</div>
+                      <label for="taskview-filter">Select a filter: </label>
+                      <select id="taskview-filter" class="form-control"></select>
                     </div>
                   </form>
                 </div>
@@ -323,7 +630,7 @@ TO-DO list app
                   Add new tag
                 </div>
                 <div class="card-body">
-                  <form onsubmit="createNewTag();" action="javascript:void(0);">
+                  <form id="tag-form" onsubmit="createNewTag();" action="javascript:void(0);">
                     <div class="mb-3">
                       <label for="tag-name" class="form-label">Tag name</label>
                       <input type="text" class="form-control" id="tag-name" name="tag-name" required>
@@ -352,8 +659,29 @@ TO-DO list app
 
     <script>
 
+      /**
+       * 
+       * NOTE: nanoid is a library function made by Andrey Sitnik,
+       * I am using it here with proper attribution.
+       * 
+       * Copyright 2017 Andrey Sitnik <andrey@sitnik.ru>
+       * License: https://github.com/ai/nanoid/blob/main/LICENSE
+       * 
+       * @param {int} e 
+       * @returns string
+       */
+      const nanoid = (e = 21) => {
+          let a = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
+          let t = "", r = crypto.getRandomValues(new Uint8Array(e));
+          for (let n = 0; n < e; n++){
+              t += a[63 & r[n]];
+          }
+          return t;
+      }
+
       Coloris({
-        themeMode: 'pill'
+        themeMode: 'pill',
+        alpha: false
       });
 
       feather.replace();
@@ -362,10 +690,53 @@ TO-DO list app
 
       }, 1000);
 
+
+      let FormHero = {
+        /**
+         * Extracts all inputs from a form (including the option boxes).
+         */
+        extractFormContent: id => {
+          let parent = gebi(id);
+          let children = parent.getElementsByTagName('*');
+          let formInputs = {};
+          formInputs['checkedTagIds'] = [];
+          for (let child of children){
+            if (child.tagName === 'INPUT'){
+              let id = child.id, name = child.name, value = child.value;
+              if (id.includes('tag-number')){
+                if (child.checked){
+                  formInputs['checkedTagIds'].push(parseInt(id.split('-')[2].replace("number", '')));
+                }
+              }
+              if (child.type == 'checkbox'){
+                value = child.checked;
+              }
+              if (name){
+                formInputs[name.split('-')[1]] = value;
+              }
+              else{
+                formInputs[id.split('-')[1]] = value;
+              }
+            }
+            else if (child.tagName === 'SELECT'){
+              formInputs[child.id.split('-')[1]] = child.value;
+            }
+          }
+          delete formInputs.tag;
+          return formInputs;
+        }
+      };
+
       // Equivalent to NodeJS from buffer.
-      const Buffer = deff.Buffer.Buffer;
+      const Buffer = window.Buffer.Buffer;
 
       let currentPage = 'auth';
+
+      let abcbc = gebi('taskview-filter')
+      abcbc.onchange = () => {
+        let newVal = parseInt(abcbc.value); // This is the filterID
+        // TO-DO: Apply a view over the Tasks we are looking at (refresh task list).
+      }
 
       function changePage(newPage){
         if (currentPage != newPage){
@@ -415,6 +786,71 @@ TO-DO list app
         }
         // Update.
         refreshClient();
+      }
+
+      /**
+       * Create a new task
+       */
+      function createNewTask(){
+        // Form values
+        let taskName = gebi('task-name').value, taskDesc = taskDescription.value(), dueDate = gebi('task-duedate').value,
+        taskPrio = gebi('task-priority').value, attachments = gebi('task-attachments').files;
+        console.log(attachments);
+        let fileData = {};
+        if (!dueDate){
+          dueDate = null;
+        }
+        // We want to read all the files and their data
+        let vk = window.setInterval(() => {
+          if (Object.keys(fileData).length == Object.keys(attachments).length){
+            // We have finished reading all files as hex.
+            console.log(fileData);
+            // Now let's compile all the tags we want to look for.
+            let tagIDs = window.currentTags.map(i => i.tagid);
+            let taskTags = [];
+            tagIDs.forEach(id => {
+              if (gebi(`task-tag-number${id}`).checked){
+                taskTags.push(id);
+              }
+            });
+            request(['createNewTask', sessionToken, taskName, dueDate, taskPrio], true, {
+              tags: taskTags,
+              attachments: fileData,
+              desc: taskDesc,
+              groupid: window.currentGroup.groupid
+            }).then(data => {
+              console.log(data);
+              if (data.status == 'OK'){
+                location.reload();
+              }
+              else{
+                alert('An error has occurred while creating this task.');
+                location.reload();
+              }
+            });
+            window.clearInterval(vk);
+          }
+        }, 200);
+        // Iterate through all attachment Files, reading them as ArrayBuffers and convert them into hex using the Buffer library.
+        Object.keys(attachments).forEach(key => {
+          let fileReader = new FileReader();
+          let file = attachments[key];
+          function d(e){
+            alert(`Error reading file ${file.name}, skipping file.`);
+            console.error(e);
+          }
+          fileReader.onerror = d;
+          fileReader.onabort = d;
+          fileReader.onloadend = data => {
+            fileData[file.name] = {
+              lastModified: file.lastModified,
+              size: file.size,
+              type: file.type,
+              hexData: Buffer.from(new Uint8Array(fileReader.result)).toString('hex')
+            };
+          }
+          fileReader.readAsArrayBuffer(file);
+        });
       }
 
       /**
@@ -572,9 +1008,12 @@ TO-DO list app
             console.log(window.currentTags);
             let taskTags = gebi('task-tags');
             taskTags.innerHTML = '';
+            let filterTags = gebi('filter-tags');
+            filterTags.innerHTML = '';
             if (window.currentTags.length === 0){
               // No tags
               taskTags.innerHTML = `<div class="container">No tags found</div>`;
+              filterTags.innerHTML = `<div class="container">No tags found</div>`;
             }
             else{
               window.currentTags.forEach(tag => {
@@ -592,6 +1031,16 @@ TO-DO list app
                   <label for="task-tag-number${tag.tagid}" style="margin-top:5px;white-space:nowrap;cursor:pointer;padding:0.25rem;padding-left:0.40rem;padding-right:0.40rem;border-radius:25px;background-color:${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</label><br>
                 `;
                 taskTags.appendChild(dom);
+
+                // now create the selectors for filters
+                
+                dom = document.createElement('div');
+                dom.classList = 'col';
+                dom.innerHTML = `
+                  <input type="checkbox" class="checkbox-round" id="filter-tag-number${tag.tagid}" name="filter-tag-number${tag.tagid}" value="${tag.tagname}">
+                  <label for="filter-tag-number${tag.tagid}" style="margin-top:5px;white-space:nowrap;cursor:pointer;padding:0.25rem;padding-left:0.40rem;padding-right:0.40rem;border-radius:25px;background-color:${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</label><br>
+                `;
+                filterTags.appendChild(dom);
               });
               taskEditorList.style.display = 'none';
               taskEditorList.style.display = 'block';
@@ -602,6 +1051,7 @@ TO-DO list app
                             <label for="vehicle2"> I have a car</label><br>
                           </div>
             */
+           updateFilterPage();
            let finishRenderingTime = performance.now();
            console.log(`Client rendering time: ${(finishRenderingTime - receivedTime).toFixed(3)}ms`);
            console.log(`Request-to-response performace time: ${(receivedTime - fetchStartTime).toFixed(3)}ms`);
@@ -630,7 +1080,8 @@ TO-DO list app
         });
         Coloris({
           parent: gebi('tag2-anchor'),
-          el: gebi('tag2-color')
+          el: gebi('tag2-color'),
+          alpha: false
         });
         currentEditingTag = id;
       }
@@ -641,13 +1092,30 @@ TO-DO list app
        * @param params Object
        * @return Object
        */
-      async function request(request){
+      async function request(request, hasBody = false, bodyContent = false){
         try {
-          const ret = await fetch('api/' + encodeURIComponent(JSON.stringify(request)));
-          if (!ret.ok){
-            throw new Error(`Response status: ${response.status}`);
+          if (!hasBody){
+            const ret = await fetch('api/' + encodeURIComponent(JSON.stringify(request)), {
+              method: 'POST'
+            });
+            if (!ret.ok){
+              throw new Error(`Response status: ${response.status}`);
+            }
+            return await ret.json();
           }
-          return await ret.json();
+          else{
+            const ret = await fetch('api/' + encodeURIComponent(JSON.stringify(request)), {
+              method: 'POST',
+              body: JSON.stringify(bodyContent),
+              headers: {
+                "Content-Type" : "application/json",
+              },
+            });
+            if (!ret.ok){
+              throw new Error(`Response status: ${response.status}`);
+            }
+            return await ret.json();
+          }
         }
         catch (e) {
           //alert('Error in request, see console for details. Please refresh the page.');
