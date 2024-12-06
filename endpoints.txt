@@ -9,5 +9,11 @@
 ['updateTag', token, tagID, tagName, tagColor] -> {'status': 'OK'}
 ['deleteTag', token, tagID, all = boolean] -> {'status': 'OK'}
 ['createNewTask', token, taskName, dueDateTimestamp, taskPriority] -> {'status': 'OK'}
+['updateTask', token] -> {'status': 'OK'} (POST)
 ['updateFilter', token] (rest in POST body) -> {'status' : 'OK'}
 ['deleteFilter', token, filterID] -> {'status' : 'OK' }
+['fetchTasksWithView', token, groupID, taskviewid] -> {'status' : 'OK'}
+['getMessages', token, taskId] -> {'status': 'OK'}
+['mark', token, completed, taskId] -> {'status': 'OK'}
+['dl', token, attachmentid] -> 
+['sendMessage', token] -> {'status': 'OK'}

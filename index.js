@@ -8,7 +8,7 @@ import sql from './db.js';
 import crypto from 'crypto';
 import util from 'util';
 import {nanoid} from 'nanoid';
-import fs from 'fs';
+import fs, { rmSync } from 'fs';
 //////////////////////
 
 // Host our web app and define our APIs
@@ -564,7 +564,7 @@ async function getUser(userID, sessionToken){
 
 async function getFilters(groupID){
     const filters = await sql`
-        SELECT * FROM TaskViews WHERE VaultID = ${groupID};
+        SELECT * FROM TaskViews WHERE VaultID = ${groupID} ORDER BY FilterName;
     `;
     return filters;
 }
@@ -757,6 +757,89 @@ let webApiListeners = {
                     res.sendInvalid();
                 }
             }
+            else if (endpoint === 'fetchTasksWithView'){
+                if (uid != -1){
+                    try {
+                        let groupid = request[2], filterid = request[3];
+                        // First we fetch from the TaskView table the entry we want.
+                        const res1 = (await sql`
+                            SELECT * FROM TaskViews WHERE TaskViewID = ${filterid}
+                        `)[0];
+                        // Create SQL syntax maps which we will interpolate with the query later.
+                        let sortByMap = {
+                            'duedate': 'Tasks.DueDate ASC',
+                            'priority': 'Tasks.Priority ASC',
+                            'title': 'Tasks.TaskName'
+                        };
+                        let groupByMap = {
+                            'day' : 'DATEPART(day, DueDate), DATEPART(day, CreatedDate)',
+                            'month': 'DATEPART(month, DueDate), DATEPART(day, CreatedDate)',
+                            'week': 'DATEPART(week, DueDate), DATEPART(week, CreatedDate)',
+                            'year': 'DATEPART(year, DueDate), DATEPART(year, CreatedDate)'
+                        };
+                        //console.log(res1);
+                        let sortBy = sortByMap[res1.sortby], groupBy = groupByMap[res1.groupby];
+                        
+                        const res2 = await sql`
+                            SELECT * FROM Tasks INNER JOIN TagsTables ON TagsTables.TaskID = Tasks.TaskID
+                            WHERE Tasks.GroupID = ${groupid}
+                            GROUP BY TagsTables.TagID, TagsTables.TaskID, Tasks.TaskID, ${groupBy}
+                            ORDER BY ${sortBy};
+                        `;
+                        res.send(str({
+                            status: 'OK',
+                            data: res2
+                        }));
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
+                    /*
+                    await sql`CREATE TABLE TaskViews(
+                        TaskViewID SERIAL PRIMARY KEY,
+                        FilterName TEXT,
+                        TagQuery TEXT,
+                        VaultID INT NOT NULL,
+                        SortBy TEXT,
+                        GroupBy TEXT,
+                        DescIncludes TEXT,
+                        TitleIncludes TEXT,
+                        TagIncludes TEXT,
+                        IsDone BOOLEAN,
+                        IsNotDone BOOLEAN,
+                        StartDate TIMESTAMP,
+                        EndDate TIMESTAMP,
+                        FOREIGN KEY (VaultID) REFERENCES Groups(GroupID)
+                            ON DELETE CASCADE
+                            ON UPDATE CASCADE
+                    );`
+                    */
+                   /*
+                    await sql`CREATE TABLE Tasks(
+                        TaskID SERIAL NOT NULL PRIMARY KEY,
+                        TaskName TEXT,
+                        GroupID INT,
+                        AttachmentID INT,
+                        Description TEXT,
+                        Priority INT,
+                        DueDate TIMESTAMP,
+                        CreatedDate TIMESTAMP,
+                        CompletedDate TIMESTAMP,
+                        ArchivedDate TIMESTAMP,
+                        FOREIGN KEY (GroupID) REFERENCES Groups(GroupID)
+                            ON DELETE CASCADE
+                            ON UPDATE CASCADE,
+                        FOREIGN KEY (AttachmentID) REFERENCES Attachments(AttachmentID)
+                            ON DELETE CASCADE
+                            ON UPDATE CASCADE
+                    );`
+                   */
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
             else if (endpoint === 'createNewTask'){
                 if (uid != -1){
                     let taskName = request[2], dueDate = request[3], taskPrio = request[4];
@@ -794,7 +877,7 @@ let webApiListeners = {
                         }
                         if (attachmentIdArray.length > 1){
                             // More than 1 file was inserted, we need to make another file with the ids.
-                            let fpath = writeAttachment('txt', JSON.stringify(attachmentIdArray));
+                            let fpath = writeAttachment('txt', str(attachmentIdArray));
                             const fid = (await sql`
                                 INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) 
                                 VALUES (${'attachments.txt'}, ${Date.now()}, ${Date.now()}, ${fpath})
@@ -870,7 +953,7 @@ let webApiListeners = {
                             SET FilterName = ${data.filterName}, SortBy = ${data.sortBy}, GroupBy = ${data.groupBy}, 
                             DescIncludes = ${data.descincludes}, TitleIncludes = ${data.titleincludes}, TagIncludes = ${data.tagincludes},
                             IsDone = ${data.isdone}, IsNotDone = ${data.isnotdone}, StartDate = ${data.startdate}, EndDate = ${data.enddate}
-                            WHERE VaultID = ${data.vaultid};
+                            WHERE VaultID = ${data.vaultid} AND TaskViewID = ${data.filterId};
                         `;
                         res.sendOK();
                        }
@@ -902,6 +985,135 @@ let webApiListeners = {
                     res.sendInvalid();
                 }
             }
+            else if (endpoint === 'getMessages'){
+                if (uid != -1){
+                    let taskId = request[2];
+                    try{
+                        const messages = await sql`
+                            SELECT UserID, Message, Tstamp FROM TaskMessages
+                            WHERE TaskID = ${taskId} ORDER BY Tstamp;
+                        `;
+                        res.send(str({
+                            status: 'OK',
+                            messages: messages
+                        }));
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'mark'){
+                if (uid != -1){
+                    let isCompleted = Boolean(request[2]), taskId = request[3];
+                    console.log(request[2], request[3]);
+                    try {
+                        if (isCompleted){
+                            await sql`
+                                UPDATE Tasks
+                                SET CompletedDate = ${Date.now()}
+                                WHERE TaskID = ${taskId};
+                            `;
+                        }
+                        else{
+                            // remove completeness status
+                            await sql`
+                                UPDATE Tasks
+                                SET CompletedDate = NULL
+                                WHERE TaskID = ${taskId};
+                            `;
+                        }
+                        res.sendOK();
+                    }
+                    catch (e){
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'updateTask'){
+                if (uid != -1){
+                    let taskName = request[2], dueDate = request[3], taskPrio = request[4], taskid = request[5];
+                    // Here we put the attachment and tags data in the request body.
+                    let tags = req.body.tags, attachments = req.body.attachments, desc = req.body.desc;
+                    try {
+                        // Get attachment id
+                        const attachmentId = (await sql`
+                                SELECT AttachmentID FROM Tasks WHERE TaskID = ${taskid};
+                            `)[0].attachmentid;
+                        let adata = await getAttachment(attachmentId);
+                        /*
+                        {
+                            hexData: hexData,
+                            fileName: res[0].filename,
+                            lastModified: res[0].modifieddate,
+                            dateAdded: res[0].dateadded
+                        }
+                        */
+                        // Check is txt file?
+                        let ext = adata.fileName.includes('txt');
+                        if (ext){
+                            let fdata = JSON.parse(Buffer.from(adata.hexData, 'hex').toString('utf-8'));
+                            for (let fname in attachments){
+                                let path = writeAttachment(fname.split('.')[1], attachments[fname].hexData);
+                                // Put this in the attachments table.
+                                const insertion = (await sql`
+                                    INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
+                                    (${fname}, ${Date.now()}, ${attachments[fname].lastModified}, ${path})
+                                     RETURNING AttachmentID;
+                                `)[0].attachmentid;
+                                fdata.push(insertion); //insert our new id into the array.
+                            }
+                            let n1 = writeAttachment(adata.fileName, Buffer.from(JSON.stringify(fdata), 'utf-8').toString('hex'));
+                            await sql`
+                                BEGIN TRANSACTION GreatReplacement;
+                                UPDATE Tasks
+                                SET TaskName = ${taskName}, DueDate = ${dueDate}, Priority = ${taskPrio}, 
+                                Description = ${desc}, AttachmentID = (
+                                INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
+                                (${adata.fileName}, ${adata.dateAdded}, ${Date.now()}, ${n1}) RETURNING 
+                                AttachmentID)
+                                WHERE TaskID = ${taskid};
+                                COMMIT;
+                            `;
+                            console.log('hey');
+                        }
+                        else{
+
+                        }
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'dl'){
+                if (uid != -1){
+
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'sendMessage'){
+                if (uid != -1){
+
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
             else{
                 res.send('Invalid API request format.');
             }
@@ -926,10 +1138,16 @@ process.on('SIGINT', () => {
     c.boldDanger('\n\nExiting..');
     process.exit();
 });
-
+dbCheck().then(() => {
+    app.listen(port, () => {
+        c.success(` App listening on port ${port} `);
+        c.white(`Local URL: http://localhost:${port}`);
+    });
+});
+/*
 reset().then(() => dbCheck().then(() => {
     app.listen(port, () => {
         c.success(` App listening on port ${port} `);
         c.white(`Local URL: http://localhost:${port}`);
     });
-}));
+}));*/

@@ -40,7 +40,35 @@ TO-DO list app
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@0.24.0/dist/coloris.min.css"/>
     <script src="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@0.24.0/dist/coloris.min.js"></script>
 
+    <script>
+      import('https://cdn.skypack.dev/date-fns').then(d => {
+        window.datefns = d;
+        window.setInterval(() => {
+          if (!('datefns' in window)){
+            // Critical component
+            location.reload();
+          }
+        }, 100);
+      }).catch(e => {
+        // Unacceptable error, have to reload.
+        // Maybe it's down.
+        location.reload();
+      });
+    </script>
+
+    <!-- marked -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- DOM purify -->
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3.2.2/dist/purify.min.js"></script>
+    
     <style>
+
+      hr {
+        border: none;
+        height: 10px;
+      }
+
       * {
         font-family: "Parkinsans", sans-serif;
       }
@@ -213,6 +241,346 @@ TO-DO list app
                   
                   let cef, cvf;
 
+                  function updateTasksWithView(){
+                    const fetchStartTime = performance.now();
+                    // Fetch new task list.
+                    let receivedTime;
+                    request(['fetchTasksWithView', sessionToken, window.currentGroup.groupid, cvf.taskviewid]).then(async data => {
+                      receivedTime = performance.now();
+                      if (data.status == 'OK'){
+                        // Merge task ids
+                        let taskTags = {};
+                        data.data.forEach(task => {
+                          if (!Object.hasOwn(taskTags, task.taskid)){
+                            taskTags[task.taskid] = [];
+                          }
+                          taskTags[task.taskid].push(task.tagid);
+                        });
+                        // Map the tags into Tag objects from the SQL table.
+                        for (let key in taskTags){
+                          taskTags[key] = taskTags[key].map(i => {
+                            let rr = window.currentGroup.tags;
+                            for (let v in rr){
+                              if (rr[v].tagid == i)
+                                return rr[v];
+                            }
+                          });
+                        }
+                        // Now put these tasktags into the Task objects.
+                        window.data.tasks.forEach((task, i) => {
+                          if (Object.hasOwn(taskTags, task.taskid)){
+                            window.data.tasks[i].tags = taskTags[task.taskid];
+                          }
+                        });
+
+
+                        //// TASKS RENDERING ////
+                        /*
+                          In this section, we are going to render DOM elements
+                          to the Task View page, according to the current filter
+                          'cvf', which should already have sorted it in SQL prior.
+                          Here, we can do additional grouping according to the filter.
+                        */
+                        let tasks = window.data.tasks;
+                        console.log(cvf);
+                        console.log(tasks);
+                        let groups = {};
+                        // Here we should put everything in this groups object for the
+                        // render later.
+                        let groupby = cvf.groupby;
+                        if (groupby == 'day'){
+                          // Try to group by due dates, otherwise default to creation date.
+                          tasks.forEach(task => {
+                            let date;
+                            let duedate = task.duedate;
+                            if (duedate != null && duedate != ''){
+                              date = new Date(task.duedate);
+                            }
+                            else{
+                              date = new Date(task.createddate);
+                            }
+                            // get day
+                            let thisGroup = date.toLocaleDateString(options = {
+                              weekday: "narrow",
+                              year: "2-digit",
+                              month: "short",
+                              day: "numeric",
+                              dateStyle: "short"
+                            });
+                            if (!Object.hasOwn(groups, thisGroup)){
+                              groups[thisGroup] = [];
+                            }
+                            groups[thisGroup].push(task);
+                          });
+                        }
+                        else if (groupby == 'week'){
+                          // Try to group by due dates, otherwise default to creation date.
+                          tasks.forEach(task => {
+                            let date;
+                            let duedate = task.duedate;
+                            if (duedate != null && duedate != ''){
+                              date = new Date(task.duedate);
+                            }
+                            else{
+                              date = new Date(task.createddate);
+                            }
+                            // get week
+                            let thisGroup = `${new Date(datefns.startOfWeek(date)).toLocaleDateString()} - ${new Date(datefns.endOfWeek(date)).toLocaleDateString()}`;
+                            if (!Object.hasOwn(groups, thisGroup)){
+                              groups[thisGroup] = [];
+                            }
+                            groups[thisGroup].push(task);
+                          });
+                        }
+                        else if (groupby == 'month'){
+                          // Try to group by due dates, otherwise default to creation date.
+                          tasks.forEach(task => {
+                            let date;
+                            let duedate = task.duedate;
+                            if (duedate != null && duedate != ''){
+                              date = new Date(task.duedate);
+                            }
+                            else{
+                              date = new Date(task.createddate);
+                            }
+                            // get month
+                            let thisGroup = `Month ${date.getMonth()} of ${date.getFullYear()}`;
+                            if (!Object.hasOwn(groups, thisGroup)){
+                              groups[thisGroup] = [];
+                            }
+                            groups[thisGroup].push(task);
+                          });
+                        }
+                        else if (groupby == 'year'){
+                          // Try to group by due dates, otherwise default to creation date.
+                          tasks.forEach(task => {
+                            let date;
+                            let duedate = task.duedate;
+                            if (duedate != null && duedate != ''){
+                              date = new Date(task.duedate);
+                            }
+                            else{
+                              date = new Date(task.createddate);
+                            }
+                            // get year
+                            let thisGroup = `${date.getFullYear()}`;
+                            if (!Object.hasOwn(groups, thisGroup)){
+                              groups[thisGroup] = [];
+                            }
+                            groups[thisGroup].push(task);
+                          });
+                        }
+                        let sortby = cvf.sortby;
+                        for (let group in groups){
+                          // Time to sort within groups
+                          if (sortby == 'priority'){
+                            groups[group].sort((a, b) => {
+                              return b.priority - a.priority;
+                            });
+                          }
+                          else if (sortby == 'title'){
+                            groups[group].sort((a, b) => {
+                              return a.taskname < b.taskname ? -1 : 1;
+                            });
+                          }
+                          else if (sortby == 'duedate'){
+                            groups[group].sort((a, b) => {
+                              let aDate, bDate;
+                              if (a.duedate != null && a.duedate != ''){
+                                aDate = new Date(a.duedate);
+                              }
+                              else{
+                                aDate = new Date(a.createddate);
+                              }
+                              if (b.duedate != null && b.duedate != ''){
+                                bDate = new Date(b.duedate);
+                              }
+                              else{
+                                bDate = new Date(b.createddate);
+                              }
+                              return aDate < bDate ? -1 : 1;
+                            });
+                          }
+                        }
+                        console.log(groups);
+                        // Now we can render the groups to the DOM.
+                        let tl = gebi('tasks-list');
+                        tl.innerHTML = '';
+                        for (let category in groups){
+                          let childHtmls = [];
+                          for (let i = 0; i < groups[category].length; i++){
+                            let task = groups[category][i];
+                            let m = await request(['getMessages', sessionToken, task.taskid]);
+                            let messages = m.messages;
+                            let messageDivs = []; //TODO
+                            let descm = '';
+                            if (task.duedate != null && task.duedate != ''){
+                              descm += 'Due ' + datefns.intlFormatDistance(
+                                new Date(task.duedate),
+                                new Date()
+                              ) + ', ' + messages.length + ' comments';
+                            }
+                            else{
+                              descm += 'Created ' + new Date(task.createddate).toLocaleString() + ', ' + messages.length + ' comments';
+                            }
+                            let datafeather = '';
+                            let dfcolor = ''
+                            let aa = '';
+                            let bb = '';
+
+                            if (task.completeddate == null){
+                              datafeather = 'circle';
+                              dfcolor = 'orange';
+                              bb = 'hidden';
+                            }
+                            else{
+                              datafeather = 'check';
+                              dfcolor = 'green';
+                              aa = 'hidden';
+                            }
+
+                            childHtmls.push(`
+                              <br>
+                              <div class="card">
+                                <div class="card-body">
+                                  <h6>${task.taskname}</h6>
+                                  <p><i data-feather="${datafeather}" style="color: ${dfcolor};"></i>&nbsp;${descm}</p>
+                                  <div id="task-sb${task.taskid}">some md content</div>
+                                  <br>
+                                  <button class="btn w-100 btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#task-sc${task.taskid}">
+                                    Toggle task messages
+                                  </button>
+                                  <div class="collapse container" id="task-sc${task.taskid}">
+                                    <br>
+                                    <div class="row" id="task-sd${task.taskid}">
+                                      <div class="col-1">test</div>
+                                      <div class="col-11">msg</div>
+                                    </div>
+                                    <br>
+                                    <form action="javascript:void(0);" onsubmit="sendMsg(${task.taskid})">
+                                      <div class="mb-3">
+                                        <label for="task-se${task.taskid}-msg" class="form-label">Enter message: </label>
+                                        <input type="text" class="form-control" id="task-se${task.taskid}-msg" name="task-se${task.taskid}-msg">
+                                      </div>
+                                    </form>
+                                  </div>
+                                </div>
+                                <div class="card-footer">
+                                  <button onclick="markComplete(${task.taskid})" type="button" class="btn text-success" ${aa}>Mark as Complete</button>
+                                  <button onclick="markIncomplete(${task.taskid})" type="button" class="btn text-secondary" ${bb}>Mark incomplete</button>
+                                  <button onclick="editTask(${task.taskid})" type="button" class="btn text-primary">Edit Task</button>
+                                  <button onclick="deleteTask(${task.taskid})" type="button" class="btn text-danger">Delete Task</button>
+                                  <button onclick="dlAttachments(${task.taskid})" type="button" class="btn">Download attachment</button>
+                                </div>
+                              </div>
+                            `);
+                          }
+                          let allTogether = childHtmls.join('');
+                          let categoryDom = `<br><hr><br>
+                            <h5 style="background-color: black; color: white; padding: 10px; border-radius: 10px;">${category}</h5>
+                            <div class="container">${allTogether}</div>
+                          `;
+                          tl.innerHTML += categoryDom;
+                          feather.replace();
+                        }
+
+                      }
+                      
+                      const finishRenderingTime = performance.now();
+                      console.log('Task Fetch-Draw performance-')
+                      console.log(`Client rendering time: ${(finishRenderingTime - receivedTime).toFixed(3)}ms`);
+                      console.log(`Request-to-response performace time: ${(receivedTime - fetchStartTime).toFixed(3)}ms`);
+                      console.log(`%cRequest-to-finish time: ${(finishRenderingTime - fetchStartTime).toFixed(3)}ms`, 'color: green;');
+                    
+                    });
+                  }
+
+                  function markComplete(taskid){
+                    request(['mark', sessionToken, true, taskid]).then(data => {
+                      if (data.status != 'OK'){
+                        alert('An error has occured.');
+                        console.log(data);
+                      }
+                      else{
+                        location.reload();
+                      }
+                    });
+                  }
+
+                  function markIncomplete(taskid){
+                    request(['mark', sessionToken, false, taskid]).then(data => {
+                      if (data.status != 'OK'){
+                        alert('An error has occured.');
+                        console.log(data);
+                      }
+                      else{
+                        location.reload();
+                      }
+                    });
+                  }
+
+                  function editTask(taskid){
+                    let m = gebi('taskEditorOffcanvas');
+                    let b = new bootstrap.Offcanvas(m);
+                    let taskname = gebi('task-name');
+                    let duedate = gebi('task-duedate');
+                    let taskprio = gebi('task-priority');
+                    m.setAttribute('data-idd', taskid);
+                    // Set the values to what the task is.
+                    window.data.tasks.forEach(task => {
+                      if (task.taskid == taskid){
+                        taskname.value = task.taskname;
+                        taskDescription.value(task.description);
+                        duedate.value = new Date(task.duedate).toISOString().slice(0, 16);
+                        taskprio.value = task.priority;
+                        // Handle tags here.
+                        if (Object.hasOwn(task, 'tags')){
+                          let taskTags = task.tags.map(i => i.tagid);
+                          window.currentGroup.tags.forEach(tag => {
+                            let g = gebi(`task-tag-number${tag.tagid}`);
+                            if (taskTags.includes(tag.tagid)){
+                              if (g != null){
+                                g.checked = true;
+                              }
+                            }
+                            else{
+                              if (g != null){
+                                g.checked = false;
+                              }
+                            }
+                          });
+                        }
+                      }
+                    });
+                    m.addEventListener('hide.bs.offcanvas', () => {
+                      m.removeAttribute('data-idd');
+                      // Clear form values.
+                      window.currentGroup.tags.forEach(tag => {
+                        let g = gebi(`task-tag-number${tag.tagid}`);
+                        if (g != null){
+                          g.checked = false;
+                        }
+                        taskname.value = '';
+                        taskDescription.value('');
+                        duedate.value = null;
+                        taskprio.value = 1;
+                      });
+                    }, {once: true});
+                    b.toggle();
+                  }
+
+                  function deleteTask(taskid){
+                    alert(taskid)
+                  }
+
+                  function dlAttachments(taskid){
+                    alert(taskid)
+                  }
+
+                  function sendMsg(taskid){
+                    alert(taskid)
+                  }
+
                   // update selects
                   function updateFilterPage(){
                     /*
@@ -249,13 +617,49 @@ TO-DO list app
                       groupby: 'day',
                       sortby: 'duedate',
                       startdate: null,
-                      tagincludes: null,
+                      tagincludes: "",
                       tagquery: null,
                       taskviewid: -1,
                       titleincludes: null,
+                      isnotdone: true,
+                      isdone: false,
                       vaultid: window.currentGroup.groupid
                     });
 
+                    
+                    // Let's find the Default filter and set it to the one we are editing.
+                    window.currentGroup.filters.forEach(filter => {
+                      if (filter.filtername === 'Default'){
+                        cef = filter;
+                      }
+                    });
+                    // Check for cvf to see if it's in the cookies.
+                    cvf = storage.read('cvf');
+                    if (cvf == -1){
+                      // Default to the next available one.
+                      cvf = window.currentGroup.filters[0];
+                    }
+                    else{
+                      // Check to make sure that the filter still exists.
+                      let stillExists = false;
+                      window.currentGroup.filters.forEach(filter => {
+                        if (filter.taskviewid == cvf.taskviewid){
+                          stillExists = true;
+                          // Keep it up to date.
+                          cvf = filter;
+                          storage.write('cvf', filter);
+                        }
+                      });
+                      if (!stillExists){
+                        cvf = window.currentGroup.filters[0];
+                        storage.write('cvf', cvf);
+                      }
+                    }
+                    if (!cef){
+                      cef = window.currentGroup.filters[0];
+                    }
+
+                    updateTasksWithView();
 
                     let flist = gebi('filters-edit-list');
                     flist.innerHTML = '';
@@ -277,6 +681,9 @@ TO-DO list app
                       // Let's also put it in the task viewer
                       if (filter.filtername != 'Add new filter'){
                         let bb = document.createElement('OPTION');
+                        if (filter.taskviewid === cvf.taskviewid){
+                          bb.setAttribute('selected', '');
+                        }
                         bb.value = filter.taskviewid;
                         bb.innerHTML = filter.filtername;
                         g.innerHTML += bb.outerHTML;
@@ -294,7 +701,7 @@ TO-DO list app
                         groupBy: 'day',
                         descincludes: null,
                         titleincludes: null,
-                        tagincludes: null,
+                        tagincludes: "",
                         isdone: false,
                         isnotdone: true,
                         startdate: null,
@@ -303,17 +710,6 @@ TO-DO list app
                         location.reload();
                       });
                       return;
-                    }
-
-                    // Let's find the Default filter and set it to the one we are editing.
-                    window.currentGroup.filters.forEach(filter => {
-                      if (filter.filtername === 'Default'){
-                        cef = filter;
-                        cvf = filter;
-                      }
-                    });
-                    if (!cef){
-                      cef = window.currentGroup.filters[0];
                     }
 
                     updateFilterForm();
@@ -363,19 +759,27 @@ TO-DO list app
                     }
 
                     // Update our exclude tags checkboxes.
-                    if (cef.tagincludes){
-                      cef.tagincludes.split(',').forEach(tagId => {
-                        let a = gebi(`filter-tag-number${tagId}`);
-                        if (a){
+                    let allTrues = [];
+                    cef.tagincludes.split(',').forEach(tagId => {
+                      allTrues.push(parseInt(tagId));
+                      let a = gebi(`filter-tag-number${tagId}`);
+                      if (a || a == null){
+                        if (a != null)
                           a.checked = true;
-                        }
-                        else{
-                          // There is a garbage tag here somewhere (tag deleted)
-                          // Let's force update the filter.
-                          updateCurrentFilter();
-                        }
-                      });
-                    }
+                      }
+                      else{
+                        // There is a garbage tag here somewhere (tag deleted)
+                        // Let's force update the filter.
+                        updateCurrentFilter();
+                      }
+                    });
+                    // Update the rest of them to false.
+                    window.currentGroup.tags.forEach(tag => {
+                      let a = gebi(`filter-tag-number${tag.tagid}`);
+                      if (!allTrues.includes(parseInt(tag.tagid)) || cef.tagincludes.length == 0){
+                        a.checked = false;
+                      }
+                    });
                   }
 
                   function updateCurrentFilter(){
@@ -402,6 +806,10 @@ TO-DO list app
                     }
                     if (data.enddate == ''){
                       data.enddate = null;
+                    }
+                    if (!(data.isdone || data.isnotdone)){
+                      alert('At least one, "Is Done" or "Is Not Done", must be selected.');
+                      return;
                     }
                     let craft = {
                       filterId: cef.taskviewid,
@@ -468,7 +876,6 @@ TO-DO list app
                         <option value="week">Week</option>
                         <option value="month">Month</option>
                         <option value="year">Year</option>
-                        <option value="tags">Tags</option>
                       </select>
                     </div>
                     <div class="mb-3">
@@ -479,7 +886,7 @@ TO-DO list app
                         <option value="duedate">Due Date</option>
                       </select>
                     </div>
-                    <div class="mb-3">
+                    <div class="mb-3" hidden>
                       <input type="checkbox" id="filter-isdone" name="filter-isdone">
                       <label for="filter-isdone" class="form-label">Is completed</label>&nbsp;
                       <input type="checkbox" id="filter-isnotdone" name="filter-isnotdone">
@@ -515,6 +922,12 @@ TO-DO list app
               <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskEditorOffcanvas"><i data-feather="plus-circle"></i> &nbsp;New Task</button>
               <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Apply Filter</button>
               
+              <br><br>
+              <div id="tasks-list">
+                
+              </div>
+              <br><br><br>
+
               <!-- new task offcanvas -->
               <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="taskEditorOffcanvas">
                 <div class="offcanvas-header">
@@ -659,6 +1072,8 @@ TO-DO list app
 
     <script>
 
+      
+
       /**
        * 
        * NOTE: nanoid is a library function made by Andrey Sitnik,
@@ -687,7 +1102,11 @@ TO-DO list app
       feather.replace();
 
       window.setInterval(() => {
-
+        let p = gebi('clock-statement');
+        if (window.data){
+          p.innerHTML = 
+          `${new Date().toLocaleString()} (${window.data.tasks.length} tasks)`;
+        }
       }, 1000);
 
 
@@ -735,6 +1154,13 @@ TO-DO list app
       let abcbc = gebi('taskview-filter')
       abcbc.onchange = () => {
         let newVal = parseInt(abcbc.value); // This is the filterID
+        // Change the cvf
+        window.currentGroup.filters.forEach(filter => {
+          if (filter.taskviewid === newVal){
+            cvf = filter;
+            storage.write('cvf', cvf);
+          }
+        });
         // TO-DO: Apply a view over the Tasks we are looking at (refresh task list).
       }
 
@@ -792,6 +1218,16 @@ TO-DO list app
        * Create a new task
        */
       function createNewTask(){
+
+        let isEdit = false;
+        let isEditId = -1;
+        // Let's check if this is an edit actually.
+        let gx = gebi('taskEditorOffcanvas');
+        if (gx.hasAttribute('data-idd')){
+          isEdit = true;
+          isEditId = parseInt(gx.getAttribute('data-idd'));
+        }
+
         // Form values
         let taskName = gebi('task-name').value, taskDesc = taskDescription.value(), dueDate = gebi('task-duedate').value,
         taskPrio = gebi('task-priority').value, attachments = gebi('task-attachments').files;
@@ -813,21 +1249,39 @@ TO-DO list app
                 taskTags.push(id);
               }
             });
-            request(['createNewTask', sessionToken, taskName, dueDate, taskPrio], true, {
-              tags: taskTags,
-              attachments: fileData,
-              desc: taskDesc,
-              groupid: window.currentGroup.groupid
-            }).then(data => {
-              console.log(data);
-              if (data.status == 'OK'){
-                location.reload();
-              }
-              else{
-                alert('An error has occurred while creating this task.');
-                location.reload();
-              }
-            });
+            if (isEdit){
+              request(['updateTask', sessionToken, taskName, dueDate, taskPrio, isEditId], true, {
+                tags: taskTags,
+                attachments: fileData,
+                desc: taskDesc,
+                groupid: window.currentGroup.groupid
+              }).then(data => {
+                if (data.status == 'OK'){
+                  location.reload();
+                }
+                else{
+                  alert('An error has occurred while creating this task.');
+                  location.reload();
+                }
+              });
+            }
+            else{
+              request(['createNewTask', sessionToken, taskName, dueDate, taskPrio], true, {
+                tags: taskTags,
+                attachments: fileData,
+                desc: taskDesc,
+                groupid: window.currentGroup.groupid
+              }).then(data => {
+                console.log(data);
+                if (data.status == 'OK'){
+                  location.reload();
+                }
+                else{
+                  alert('An error has occurred while creating this task.');
+                  location.reload();
+                }
+              });
+            }
             window.clearInterval(vk);
           }
         }, 200);
@@ -951,6 +1405,7 @@ TO-DO list app
             location.reload();
           }
           else{
+
             window.data = data;
             // Set our uid
             uid = data.me.userid;
@@ -1119,6 +1574,7 @@ TO-DO list app
         }
         catch (e) {
           //alert('Error in request, see console for details. Please refresh the page.');
+          console.error(`Error while handling route ${request}`);
           console.error(e.message);
         }
       }
@@ -1156,6 +1612,41 @@ TO-DO list app
           console.error(e);
         });
       }
+
+      /**
+       * Returns the week number for this date.  dowOffset is the day of week the week
+       * "starts" on for your locale - it can be from 0 to 6. If dowOffset is 1 (Monday),
+       * the week returned is the ISO 8601 week number.
+       * @param int dowOffset
+       * @return int
+       */
+      Date.prototype.getWeek = function (dowOffset) {
+      /*getWeek() was developed by Nick Baicoianu at MeanFreePath: http://www.meanfreepath.com */
+
+          dowOffset = typeof(dowOffset) == 'number' ? dowOffset : 0; //default dowOffset to zero
+          var newYear = new Date(this.getFullYear(),0,1);
+          var day = newYear.getDay() - dowOffset; //the day of week the year begins on
+          day = (day >= 0 ? day : day + 7);
+          var daynum = Math.floor((this.getTime() - newYear.getTime() - 
+          (this.getTimezoneOffset()-newYear.getTimezoneOffset())*60000)/86400000) + 1;
+          var weeknum;
+          //if the year starts before the middle of a week
+          if(day < 4) {
+              weeknum = Math.floor((daynum+day-1)/7) + 1;
+              if(weeknum > 52) {
+                  nYear = new Date(this.getFullYear() + 1,0,1);
+                  nday = nYear.getDay() - dowOffset;
+                  nday = nday >= 0 ? nday : nday + 7;
+                  /*if the next year starts before the middle of
+                    the week, it is week #1 of that year*/
+                  weeknum = nday < 4 ? 1 : 53;
+              }
+          }
+          else {
+              weeknum = Math.floor((daynum+day-1)/7);
+          }
+          return weeknum;
+      };
     </script>
 
   </body>
