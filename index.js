@@ -5,10 +5,12 @@ import express from 'express';
 import path from 'path';
 import chalk from 'chalk';
 import sql from './db.js';
-import crypto from 'crypto';
+import crypto, { createCipheriv } from 'crypto';
 import util from 'util';
 import {nanoid} from 'nanoid';
-import fs, { rmSync } from 'fs';
+import fs from 'fs';
+import * as archiver from 'archiver';
+import { get } from 'http';
 //////////////////////
 
 // Host our web app and define our APIs
@@ -41,6 +43,8 @@ const c = {
         console.log(chalk.inverse(msg));
     }
 };
+
+let serve = {};
 
 function str(data){
     return JSON.stringify(data);
@@ -197,7 +201,7 @@ async function dbCheck(){
             PasswordHash VARCHAR(128) NOT NULL,
             PasswordSalt VARCHAR(16) NOT NULL,
             FOREIGN KEY (PfpAttachmentID) REFERENCES Attachments(AttachmentID)
-                ON DELETE CASCADE
+                ON DELETE SET NULL
                 ON UPDATE CASCADE
         );`
         // Add the default admin user
@@ -244,6 +248,8 @@ async function dbCheck(){
             GroupName VARCHAR(100) NOT NULL,
             AdminID INT NOT NULL,
             FOREIGN KEY (AdminID) REFERENCES Users(UserID)
+                ON DELETE CASCADE
+                ON UPDATE CASCADE
         );`
         c.white('* Groups table created.');
     }
@@ -302,7 +308,7 @@ async function dbCheck(){
                 ON DELETE CASCADE
                 ON UPDATE CASCADE,
             FOREIGN KEY (AttachmentID) REFERENCES Attachments(AttachmentID)
-                ON DELETE CASCADE
+                ON DELETE SET NULL
                 ON UPDATE CASCADE
         );`
         c.white('* Tasks table created.');
@@ -408,7 +414,79 @@ async function dbCheck(){
             c.error('* ' + e);
         }
     }
+
+    c.runBigProcess('\n' + ' Running Task attachment integrity checks...');
+    // Check for task-attachment integrity.
+    const test1 = await sql`
+        SELECT AttachmentID, TaskID, TaskName FROM Tasks;
+    `;
+    let caught = 0;
+    for (let i = 0; i < test1.length; i++){
+        let id = test1[i].attachmentid;
+        if (id != null){
+            let getTest = await getAttachment(id, true);
+            if (getTest == -1){
+                await sql`
+                    UPDATE Tasks
+                    SET AttachmentID = NULL
+                    WHERE TaskID = ${test1[i].taskid};
+                `;
+                caught++;
+            }
+            else{
+                // TO-DO: Check every array pair in txt file if it is 
+                /*
+                getTest maybe is = 
+                {
+                hexData: '5b32322c32332c32342c32355d',
+                fileName: 'attachments.txt',
+                lastModified: 2024-12-06T17:41:23.074Z,
+                dateAdded: 2024-12-06T17:41:23.074Z
+                }
+                */
+               if (getTest.fileName.split('.')[1] == 'txt'){
+                    try {
+                        let t = JSON.parse(Buffer.from(getTest.hexData, 'hex').toString('utf-8'));
+                        for (let j = 0; j < t.length; j++){
+                            let getTest2 = await getAttachment(t[j], true);
+                            if (getTest2 == -1){
+                                await sql`
+                                    DELETE FROM Attachments WHERE AttachmentID = ${t.splice(j, 1)[0]};
+                                `;
+                                caught++;
+                            }
+                        }
+                        // Rewrite back to the file.
+                        deleteAttachment(id);
+                        let dx = writeAttachment('txt', JSON.stringify(t));
+                        const nid = (await sql`
+                            INSERT INTO Attachments(FileName, DateAdded, DateModified, FilePath)
+                            VALUES (${nanoid()}, ${Date.now()}, ${Date.now()}, ${dx}) RETURNING AttachmentID;
+                        `)[0].attachmentid;
+                        await sql`
+                            UPDATE Tasks
+                            SET AttachmentID = ${nid}
+                            WHERE TaskID = ${test1[i].taskid};
+                        `;
+                    }
+                    catch(e){
+                        // Corrupt file, remove it.
+                        await sql`
+                            UPDATE Tasks
+                            SET AttachmentID = NULL
+                            WHERE TaskID = ${test1[i].taskid};
+                        `;
+                        caught++;
+                    }
+               }
+            }
+        }
+    }
+    c.notice(`# files caught: ${caught}`);
+    // Test for junk attachments (TO-DO);
+    
     c.white('\n\n');
+
 }
 
 /**
@@ -506,7 +584,7 @@ async function getAllTasks(userID){
  * (including binary file data).
  * @param {*} attachmentID 
  */
-async function getAttachment(attachmentID){
+async function getAttachment(attachmentID, special = false){
     const res = await sql`
         SELECT * FROM Attachments WHERE AttachmentID = ${attachmentID}
     `;
@@ -515,6 +593,16 @@ async function getAttachment(attachmentID){
     }
     const fpath = res[0].filepath;
     // Read file data.
+    if ((!fs.existsSync(fpath)) && special){
+        return -1;
+    }
+    if ((!fs.existsSync(fpath))){
+        // No file exist but entry is in table...
+        await sql`
+            DELETE FROM Attachments WHERE AttachmentID = ${attachmentID};
+        `;
+        return -1;
+    }
     const rd = util.promisify(fs.readFile);
     try {
         const hexData = await rd(fpath, 'hex');
@@ -529,6 +617,7 @@ async function getAttachment(attachmentID){
     catch(e){
         c.error(`Error reading attachment ${fpath}`);
         c.error(e);
+        return -1;
     }
 }
 
@@ -580,6 +669,25 @@ function writeAttachment(ext, data){
     let fullPath = path.resolve(`attachments/${rndFilename}`);
     fs.writeFileSync(fullPath, data);
     return fullPath;
+}
+
+/**
+ * Deletes an attachment from Attachments table.
+ * @param {int} attachmentid 
+ * @returns 
+ */
+async function deleteAttachment(attachmentid){
+    try {
+        await sql`
+            DELETE From Attachments WHERE 
+            AttachmentID = ${attachmentid};
+        `;
+        return true;
+    }
+    catch(e){
+        c.error(e);
+        return false;
+    }
 }
 
 ///// WEB APIs /////
@@ -1058,39 +1166,51 @@ let webApiListeners = {
                         }
                         */
                         // Check is txt file?
-                        let ext = adata.fileName.includes('txt');
-                        if (ext){
-                            let fdata = JSON.parse(Buffer.from(adata.hexData, 'hex').toString('utf-8'));
-                            for (let fname in attachments){
-                                let path = writeAttachment(fname.split('.')[1], attachments[fname].hexData);
-                                // Put this in the attachments table.
-                                const insertion = (await sql`
-                                    INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
-                                    (${fname}, ${Date.now()}, ${attachments[fname].lastModified}, ${path})
-                                     RETURNING AttachmentID;
-                                `)[0].attachmentid;
-                                fdata.push(insertion); //insert our new id into the array.
-                            }
-                            let n1 = writeAttachment(adata.fileName, Buffer.from(JSON.stringify(fdata), 'utf-8').toString('hex'));
-                            await sql`
-                                BEGIN TRANSACTION GreatReplacement;
-                                UPDATE Tasks
-                                SET TaskName = ${taskName}, DueDate = ${dueDate}, Priority = ${taskPrio}, 
-                                Description = ${desc}, AttachmentID = (
-                                INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
-                                (${adata.fileName}, ${adata.dateAdded}, ${Date.now()}, ${n1}) RETURNING 
-                                AttachmentID)
-                                WHERE TaskID = ${taskid};
-                                COMMIT;
-                            `;
-                            console.log('hey');
-                        }
-                        else{
 
+                        if ((typeof adata === 'undefined') || adata == -1){
+                            adata = {
+                                hexData: Buffer.from("[]", 'utf-8').toString('hex'),
+                                fileName: nanoid() + '.txt',
+                                lastModified: Date.now(),
+                                dateAdded: Date.now()
+                            };
                         }
+                        let fdata;
+                        try {
+                            fdata = JSON.parse(Buffer.from(adata.hexData, 'hex').toString('utf-8'));
+                        }   
+                        catch(e){
+                            c.error('Repairing a corrupted attachments file.');
+                            fdata = [];
+                        }
+                        for (let fname in attachments){
+                            let path = writeAttachment(fname.split('.')[1], attachments[fname].hexData);
+                            // Put this in the attachments table.
+                            const insertion = (await sql`
+                                INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
+                                (${fname}, ${Date.now()}, ${attachments[fname].lastModified}, ${path})
+                                RETURNING AttachmentID;
+                            `)[0].attachmentid;
+                            fdata.push(insertion); //insert our new id into the array.
+                        }
+                        let n1 = writeAttachment(adata.fileName, JSON.stringify(fdata));
+                        const newAttachmentId = (await sql`
+                            INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
+                            (${adata.fileName}, ${adata.dateAdded}, ${Date.now()}, ${n1}) RETURNING AttachmentID;
+                            `)[0].attachmentid;
+                        await sql`
+                            UPDATE Tasks
+                            SET TaskName = ${taskName}, DueDate = ${dueDate}, Priority = ${taskPrio}, 
+                            Description = ${desc}, AttachmentID = ${newAttachmentId}
+                            WHERE TaskID = ${taskid}
+                        `;
+                        res.send(str({
+                            status: 'OK',
+                            feedback: fdata
+                        }));
                     }
                     catch(e){
-                        c.error(e);
+                        console.error(e);
                         res.sendError();
                     }
                 }
@@ -1099,8 +1219,94 @@ let webApiListeners = {
                 }
             }
             else if (endpoint === 'dl'){
+                let attachmentid = request[2];
                 if (uid != -1){
-
+                    // First we should get the entry from the table.
+                    let data = await getAttachment(attachmentid);
+                    if (data != -1){
+                        if (data.fileName.split('.')[1] == 'txt'){
+                            // Multi file
+                            try {
+                                let fdata = JSON.parse(Buffer.from(data.hexData, 'hex').toString('utf-8'));
+                                let zippath = path.resolve(`attachments/${nanoid()}.zip`);
+                                const output = fs.createWriteStream(zippath);
+                                const archive = new archiver.default('zip',
+                                    {zlib: {level: 9}}
+                                );
+                                output.on('close', () => {
+                                    // Should be finished
+                                    let serveId = nanoid();
+                                    serve[serveId] = zippath;
+                                    res.send(str({
+                                        status: 'OK',
+                                        serveId: serveId
+                                    }));
+                                });
+                                archive.on('error', e => {
+                                    console.error(e);
+                                    res.sendError();
+                                });
+                                archive.on('warning', e => {
+                                    if (e.code === 'ENOENT'){
+                                        console.warn(e);
+                                    }
+                                    else{
+                                        console.error(e);
+                                    }
+                                    res.sendError();
+                                });
+                                archive.pipe(output);
+                                for (let i = 0; i < fdata.length; i++){
+                                    let aid = fdata[i];
+                                    let ddata = await getAttachment(aid);
+                                    archive.append(Buffer.from(ddata.hexData, 'hex'), {name: ddata.fileName});
+                                }
+                                archive.finalize();
+                            }
+                            catch(e){
+                                console.error(e);
+                                res.sendError();
+                            }
+                        }
+                        else{
+                            // Single file.
+                            try {
+                                const attk = (await sql`
+                                    SELECT FilePath FROM Attachments WHERE 
+                                    AttachmentID = ${attachmentid};
+                                `)[0].filepath;
+                                let serveId = nanoid();
+                                serve[serveId] = attk;
+                                res.send(str({
+                                    status: 'OK',
+                                    serveId: serveId
+                                }));
+                            }
+                            catch(e){
+                                c.error(e);
+                                res.sendError();
+                            }
+                        }
+                    }
+                    else{
+                        res.send(str({
+                            status: 'NOFILE'
+                        }));
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'serv'){
+                let serveId = request[2];
+                if (uid != -1){
+                    if (Object.hasOwn(serve, serveId)){
+                        res.sendFile(serve[serveId]);
+                    }
+                    else{
+                        res.sendError();
+                    }
                 }
                 else{
                     res.sendInvalid();
@@ -1109,6 +1315,25 @@ let webApiListeners = {
             else if (endpoint === 'sendMessage'){
                 if (uid != -1){
 
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'deleteTask'){
+                let taskid = request[2];
+                if (uid != -1){
+                    try {
+                        await sql`
+                            DELETE FROM Tasks
+                            WHERE TaskID = ${taskid};
+                        `;
+                        res.sendOK();
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
                 }
                 else{
                     res.sendInvalid();

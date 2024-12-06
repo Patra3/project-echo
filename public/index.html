@@ -415,10 +415,16 @@ TO-DO list app
                             let messageDivs = []; //TODO
                             let descm = '';
                             if (task.duedate != null && task.duedate != ''){
-                              descm += 'Due ' + datefns.intlFormatDistance(
-                                new Date(task.duedate),
-                                new Date()
-                              ) + ', ' + messages.length + ' comments';
+                              try {
+                                descm += 'Due ' + datefns.intlFormatDistance(
+                                  new Date(task.duedate),
+                                  new Date()
+                                ) + ', ' + messages.length + ' comments';
+                              }
+                              catch(e){
+                                // most likely the datefns error.
+                                location.reload();
+                              }
                             }
                             else{
                               descm += 'Created ' + new Date(task.createddate).toLocaleString() + ', ' + messages.length + ' comments';
@@ -470,7 +476,7 @@ TO-DO list app
                                   <button onclick="markIncomplete(${task.taskid})" type="button" class="btn text-secondary" ${bb}>Mark incomplete</button>
                                   <button onclick="editTask(${task.taskid})" type="button" class="btn text-primary">Edit Task</button>
                                   <button onclick="deleteTask(${task.taskid})" type="button" class="btn text-danger">Delete Task</button>
-                                  <button onclick="dlAttachments(${task.taskid})" type="button" class="btn">Download attachment</button>
+                                  <button onclick="dlAttachments(${task.taskid})" type="button" class="btn" ${task.attachmentid == null ? 'hidden' : ''}>Download attachment</button>
                                 </div>
                               </div>
                             `);
@@ -525,6 +531,7 @@ TO-DO list app
                     let taskname = gebi('task-name');
                     let duedate = gebi('task-duedate');
                     let taskprio = gebi('task-priority');
+                    gebi('task-attachments').value = '';
                     m.setAttribute('data-idd', taskid);
                     // Set the values to what the task is.
                     window.data.tasks.forEach(task => {
@@ -563,6 +570,7 @@ TO-DO list app
                         taskname.value = '';
                         taskDescription.value('');
                         duedate.value = null;
+                        gebi('task-attachments').value = '';
                         taskprio.value = 1;
                       });
                     }, {once: true});
@@ -570,11 +578,41 @@ TO-DO list app
                   }
 
                   function deleteTask(taskid){
-                    alert(taskid)
+                    if (confirm('Are you certain you wish to delete this task?')){
+                      request(['deleteTask', sessionToken, taskid]).then(data => {
+                        if (data.status == 'OK'){
+                          location.reload();
+                        }
+                        else{
+                          alert('An error has occurred.');
+                          location.reload();
+                        }
+                      });
+                    }
+                    else{
+                      alert('Nothing was deleted.');
+                    }
                   }
 
                   function dlAttachments(taskid){
-                    alert(taskid)
+                    request(['dl', sessionToken, taskid]).then(data => {
+                      if (data.status == 'OK'){
+                        let f = gebi('dldl');
+                        f.action = `/api/${JSON.stringify([
+                          'serv',
+                          sessionToken,
+                          data.serveId
+                        ])}`;
+                        f.method = "post";
+                        f.target = "_blank";
+                        f.submit();
+                        //window.open(`/serv/${data.serveId}`, '_blank').focus();
+                      }
+                      else{
+                        alert('An error has occurred.');
+                        console.log(data);
+                      }
+                    });
                   }
 
                   function sendMsg(taskid){
@@ -1069,6 +1107,8 @@ TO-DO list app
         </div>
       </div>
     </div>
+
+    <form id="dldl" class="display:none;"></form>
 
     <script>
 
