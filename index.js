@@ -389,6 +389,7 @@ async function dbCheck(){
             c.error('* ' + e);
         }
     }
+    /*
     // Create Task message table
     try {
         await sql`CREATE TABLE TaskMessages(
@@ -413,8 +414,9 @@ async function dbCheck(){
         else{
             c.error('* ' + e);
         }
-    }
+    }*/
 
+        /*
     c.runBigProcess('\n' + ' Running Task attachment integrity checks...');
     // Check for task-attachment integrity.
     const test1 = await sql`
@@ -443,7 +445,7 @@ async function dbCheck(){
                 lastModified: 2024-12-06T17:41:23.074Z,
                 dateAdded: 2024-12-06T17:41:23.074Z
                 }
-                */
+                *//*
                if (getTest.fileName.split('.')[1] == 'txt'){
                     try {
                         let t = JSON.parse(Buffer.from(getTest.hexData, 'hex').toString('utf-8'));
@@ -482,7 +484,7 @@ async function dbCheck(){
             }
         }
     }
-    c.notice(`# files caught: ${caught}`);
+    c.notice(`# files caught: ${caught}`);*/
     // Test for junk attachments (TO-DO);
     
     c.white('\n\n');
@@ -1093,32 +1095,9 @@ let webApiListeners = {
                     res.sendInvalid();
                 }
             }
-            else if (endpoint === 'getMessages'){
-                if (uid != -1){
-                    let taskId = request[2];
-                    try{
-                        const messages = await sql`
-                            SELECT UserID, Message, Tstamp FROM TaskMessages
-                            WHERE TaskID = ${taskId} ORDER BY Tstamp;
-                        `;
-                        res.send(str({
-                            status: 'OK',
-                            messages: messages
-                        }));
-                    }
-                    catch(e){
-                        c.error(e);
-                        res.sendError();
-                    }
-                }
-                else{
-                    res.sendInvalid();
-                }
-            }
             else if (endpoint === 'mark'){
                 if (uid != -1){
                     let isCompleted = Boolean(request[2]), taskId = request[3];
-                    console.log(request[2], request[3]);
                     try {
                         if (isCompleted){
                             await sql`
@@ -1151,62 +1130,66 @@ let webApiListeners = {
                     let taskName = request[2], dueDate = request[3], taskPrio = request[4], taskid = request[5];
                     // Here we put the attachment and tags data in the request body.
                     let tags = req.body.tags, attachments = req.body.attachments, desc = req.body.desc;
+                    
+                    //console.log(taskid);
                     try {
-                        // Get attachment id
-                        const attachmentId = (await sql`
-                                SELECT AttachmentID FROM Tasks WHERE TaskID = ${taskid};
-                            `)[0].attachmentid;
-                        let adata = await getAttachment(attachmentId);
-                        /*
-                        {
-                            hexData: hexData,
-                            fileName: res[0].filename,
-                            lastModified: res[0].modifieddate,
-                            dateAdded: res[0].dateadded
-                        }
-                        */
-                        // Check is txt file?
-
-                        if ((typeof adata === 'undefined') || adata == -1){
-                            adata = {
-                                hexData: Buffer.from("[]", 'utf-8').toString('hex'),
-                                fileName: nanoid() + '.txt',
-                                lastModified: Date.now(),
-                                dateAdded: Date.now()
-                            };
-                        }
-                        let fdata;
-                        try {
-                            fdata = JSON.parse(Buffer.from(adata.hexData, 'hex').toString('utf-8'));
-                        }   
-                        catch(e){
-                            c.error('Repairing a corrupted attachments file.');
+                        let newAttachmentId = -1;
+                        if (Object.keys(attachments).length > 0){
+                            // Get attachment id
+                            const attachmentId = (await sql`
+                                    SELECT AttachmentID FROM Tasks WHERE TaskID = ${taskid};
+                                `)[0].attachmentid;
+                            deleteAttachment(attachmentId);
+                            let fdata;
                             fdata = [];
-                        }
-                        for (let fname in attachments){
-                            let path = writeAttachment(fname.split('.')[1], attachments[fname].hexData);
-                            // Put this in the attachments table.
-                            const insertion = (await sql`
+                            for (let fname in attachments){
+                                let path = writeAttachment(fname.split('.')[1], Buffer.from(attachments[fname].hexData, 'hex'));
+                                // Put this in the attachments table.
+                                const insertion = (await sql`
+                                    INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
+                                    (${fname}, ${Date.now()}, ${attachments[fname].lastModified}, ${path})
+                                    RETURNING AttachmentID;
+                                `)[0].attachmentid;
+                                fdata.push(insertion); //insert our new id into the array.
+                            }
+                            let n1 = writeAttachment(nanoid() + '.txt', JSON.stringify(fdata));
+                            newAttachmentId = (await sql`
                                 INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
-                                (${fname}, ${Date.now()}, ${attachments[fname].lastModified}, ${path})
-                                RETURNING AttachmentID;
-                            `)[0].attachmentid;
-                            fdata.push(insertion); //insert our new id into the array.
+                                (${nanoid() + '.txt'}, ${Date.now()}, ${Date.now()}, ${n1}) RETURNING AttachmentID;
+                                `)[0].attachmentid;
                         }
-                        let n1 = writeAttachment(adata.fileName, JSON.stringify(fdata));
-                        const newAttachmentId = (await sql`
-                            INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
-                            (${adata.fileName}, ${adata.dateAdded}, ${Date.now()}, ${n1}) RETURNING AttachmentID;
-                            `)[0].attachmentid;
-                        await sql`
-                            UPDATE Tasks
-                            SET TaskName = ${taskName}, DueDate = ${dueDate}, Priority = ${taskPrio}, 
-                            Description = ${desc}, AttachmentID = ${newAttachmentId}
-                            WHERE TaskID = ${taskid}
-                        `;
+                        if (newAttachmentId != -1){
+                            await sql`
+                                UPDATE Tasks
+                                SET TaskName = ${taskName}, DueDate = ${dueDate}, Priority = ${taskPrio}, 
+                                Description = ${desc}, AttachmentID = ${newAttachmentId}, TaskID = ${taskid}
+                                WHERE TaskID = ${taskid};
+                            `
+                        }
+                        else{
+                            await sql`
+                                UPDATE Tasks
+                                SET TaskName = ${taskName}, DueDate = ${dueDate}, Priority = ${taskPrio}, 
+                                Description = ${desc}, TaskID = ${taskid}
+                                WHERE TaskID = ${taskid};
+                            `
+                        }
+                        // Check for any new tags as well.
+                        for (let zz = 0; zz < tags.length; zz++){
+                            let tagid = tags[zz];
+                            const test = await sql`
+                                SELECT TagID, TaskID FROM TagsTables
+                                WHERE TagID = ${tagid} AND TaskID = ${taskid};
+                            `;
+                            if (test.length === 0){
+                                await sql`
+                                    INSERT INTO TagsTables (TagID, TaskID)
+                                    VALUES (${tagid}, ${taskid});
+                                `
+                            }
+                        }
                         res.send(str({
-                            status: 'OK',
-                            feedback: fdata
+                            status: 'OK'
                         }));
                     }
                     catch(e){
@@ -1228,6 +1211,15 @@ let webApiListeners = {
                             // Multi file
                             try {
                                 let fdata = JSON.parse(Buffer.from(data.hexData, 'hex').toString('utf-8'));
+                                if (fdata.length == 1){
+                                    let serveId = nanoid();
+                                    serve[serveId] = (await sql`SELECT FilePath FROM Attachments WHERE AttachmentID = ${fdata[0]}`)[0].filepath;
+                                    res.send(str({
+                                        status: 'OK',
+                                        serveId: serveId
+                                    }));
+                                    return;
+                                }
                                 let zippath = path.resolve(`attachments/${nanoid()}.zip`);
                                 const output = fs.createWriteStream(zippath);
                                 const archive = new archiver.default('zip',
@@ -1289,6 +1281,7 @@ let webApiListeners = {
                         }
                     }
                     else{
+                        console.log(data);
                         res.send(str({
                             status: 'NOFILE'
                         }));
@@ -1363,6 +1356,7 @@ process.on('SIGINT', () => {
     c.boldDanger('\n\nExiting..');
     process.exit();
 });
+
 dbCheck().then(() => {
     app.listen(port, () => {
         c.success(` App listening on port ${port} `);

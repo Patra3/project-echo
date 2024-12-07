@@ -273,6 +273,16 @@ TO-DO list app
                           }
                         });
 
+                        if (!showArchived){
+                          // Hide completed tasks.
+                          let l = window.data.tasks;
+                          for (let i = l.length - 1; i >= 0; i--){
+                            if (l[i].completeddate != null){
+                              l.splice(i, 1);
+                            }
+                          }
+                        }
+
 
                         //// TASKS RENDERING ////
                         /*
@@ -410,16 +420,13 @@ TO-DO list app
                           let childHtmls = [];
                           for (let i = 0; i < groups[category].length; i++){
                             let task = groups[category][i];
-                            let m = await request(['getMessages', sessionToken, task.taskid]);
-                            let messages = m.messages;
-                            let messageDivs = []; //TODO
                             let descm = '';
                             if (task.duedate != null && task.duedate != ''){
                               try {
                                 descm += 'Due ' + datefns.intlFormatDistance(
                                   new Date(task.duedate),
                                   new Date()
-                                ) + ', ' + messages.length + ' comments';
+                                );
                               }
                               catch(e){
                                 // most likely the datefns error.
@@ -427,7 +434,7 @@ TO-DO list app
                               }
                             }
                             else{
-                              descm += 'Created ' + new Date(task.createddate).toLocaleString() + ', ' + messages.length + ' comments';
+                              descm += 'Created ' + new Date(task.createddate).toLocaleString();
                             }
                             let datafeather = '';
                             let dfcolor = ''
@@ -451,32 +458,14 @@ TO-DO list app
                                 <div class="card-body">
                                   <h6>${task.taskname}</h6>
                                   <p><i data-feather="${datafeather}" style="color: ${dfcolor};"></i>&nbsp;${descm}</p>
-                                  <div id="task-sb${task.taskid}">some md content</div>
-                                  <br>
-                                  <button class="btn w-100 btn-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#task-sc${task.taskid}">
-                                    Toggle task messages
-                                  </button>
-                                  <div class="collapse container" id="task-sc${task.taskid}">
-                                    <br>
-                                    <div class="row" id="task-sd${task.taskid}">
-                                      <div class="col-1">test</div>
-                                      <div class="col-11">msg</div>
-                                    </div>
-                                    <br>
-                                    <form action="javascript:void(0);" onsubmit="sendMsg(${task.taskid})">
-                                      <div class="mb-3">
-                                        <label for="task-se${task.taskid}-msg" class="form-label">Enter message: </label>
-                                        <input type="text" class="form-control" id="task-se${task.taskid}-msg" name="task-se${task.taskid}-msg">
-                                      </div>
-                                    </form>
-                                  </div>
+                                  <div id="task-sb${task.taskid}">${DOMPurify.sanitize(marked.parse(task.description))}</div>
                                 </div>
                                 <div class="card-footer">
                                   <button onclick="markComplete(${task.taskid})" type="button" class="btn text-success" ${aa}>Mark as Complete</button>
                                   <button onclick="markIncomplete(${task.taskid})" type="button" class="btn text-secondary" ${bb}>Mark incomplete</button>
                                   <button onclick="editTask(${task.taskid})" type="button" class="btn text-primary">Edit Task</button>
                                   <button onclick="deleteTask(${task.taskid})" type="button" class="btn text-danger">Delete Task</button>
-                                  <button onclick="dlAttachments(${task.taskid})" type="button" class="btn" ${task.attachmentid == null ? 'hidden' : ''}>Download attachment</button>
+                                  <button onclick="dlAttachments(${task.attachmentid})" type="button" class="btn" ${task.attachmentid == null ? 'hidden' : ''}>Download attachment</button>
                                 </div>
                               </div>
                             `);
@@ -538,7 +527,11 @@ TO-DO list app
                       if (task.taskid == taskid){
                         taskname.value = task.taskname;
                         taskDescription.value(task.description);
-                        duedate.value = new Date(task.duedate).toISOString().slice(0, 16);
+                        if (task.duedate != null)
+                          duedate.value = new Date(task.duedate).toISOString().slice(0, 16);
+                        else
+                          duedate.value = null;
+
                         taskprio.value = task.priority;
                         // Handle tags here.
                         if (Object.hasOwn(task, 'tags')){
@@ -1022,6 +1015,10 @@ TO-DO list app
                       <label for="taskview-filter">Select a filter: </label>
                       <select id="taskview-filter" class="form-control"></select>
                     </div>
+                    <div class="mb-3">
+                      <label for="taskview-showarchived">Show completed: </label>
+                      <input type="checkbox" id="taskview-showarchived">
+                    </div> 
                   </form>
                 </div>
               </div>
@@ -1113,6 +1110,25 @@ TO-DO list app
     <script>
 
       
+      let storage = {
+        write: (key, value) => {
+          localStorage.setItem(key, JSON.stringify([value]));
+        },
+        read: key => {
+          if (localStorage.getItem(key) == null){
+            return -1;
+          }
+          return JSON.parse(localStorage.getItem(key))[0];
+        },
+        delete: key => {
+          localStorage.removeItem(key);
+        },
+        clear: () => {
+          localStorage.clear();
+        }
+      }
+
+      
 
       /**
        * 
@@ -1186,6 +1202,15 @@ TO-DO list app
         }
       };
 
+      let abcba = gebi('taskview-showarchived');
+      window.showArchived = storage.read('showarchived');
+      if (window.showArchived != -1){
+        abcba.checked = window.showArchived;
+      }
+      else{
+        window.showArchived = abcba.checked;
+      }
+
       // Equivalent to NodeJS from buffer.
       const Buffer = window.Buffer.Buffer;
 
@@ -1203,6 +1228,14 @@ TO-DO list app
         });
         // TO-DO: Apply a view over the Tasks we are looking at (refresh task list).
       }
+      abcba.onchange = () => {
+        window.showArchived = !window.showArchived;
+        storage.write('showarchived', window.showArchived);
+        abcba.checked = window.showArchived;
+        
+        refreshClient();
+        updateTasksWithView();
+      }
 
       function changePage(newPage){
         if (currentPage != newPage){
@@ -1217,24 +1250,6 @@ TO-DO list app
             location.hash = newPage;
           }
           currentPage = newPage;
-        }
-      }
-
-      let storage = {
-        write: (key, value) => {
-          localStorage.setItem(key, JSON.stringify([value]));
-        },
-        read: key => {
-          if (localStorage.getItem(key) == null){
-            return -1;
-          }
-          return JSON.parse(localStorage.getItem(key))[0];
-        },
-        delete: key => {
-          localStorage.removeItem(key);
-        },
-        clear: () => {
-          localStorage.clear();
         }
       }
 
@@ -1301,7 +1316,8 @@ TO-DO list app
                 }
                 else{
                   alert('An error has occurred while creating this task.');
-                  location.reload();
+                  console.log(window.data);
+                  //location.reload();
                 }
               });
             }
