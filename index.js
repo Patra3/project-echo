@@ -48,6 +48,9 @@ const c = {
     success: msg => {
         console.log(chalk.bgGreen(msg));
     },
+    successText: msg => {
+        console.log(chalk.green(msg));
+    },
     inverse: msg => {
         console.log(chalk.inverse(msg));
     }
@@ -494,21 +497,49 @@ async function dbCheck(){
     }
     c.notice(`# files caught: ${caught}`);*/
     // Test for junk attachments (TO-DO);
+    c.white('\n');
+}
+
+async function cleanAttachments(){
     c.runBigProcess('\n Cleaning attachments folder...');
-    let totalCleaned;
-    const allAttachments = await sql`
+    let corrections = 0;
+    let checked = 0;
+    
+    // Now manually check the rest files.
+    const gt = (await sql`
         SELECT FilePath FROM Attachments;
-    `;
-    allAttachments.forEach(i => {
-        let fp = i.filepath;
-        // Check if filepath is a text file.
-        let ext = path.extname(fp);
-        if (ext == '.txt'){
-
+    `).map(i => path.basename(i.filepath));
+    let dm = fs.readdirSync(path.resolve('attachments'));
+    for (let i = 0; i < dm.length; i++){
+        checked++;
+        let pl = path.basename(path.resolve('attachments/' + dm[i]));
+        if (!gt.includes(pl)){
+            if (path.extname(pl) == '.echoattachments'){
+                let rd = JSON.parse(fs.readFileSync(path.resolve('attachments/' + dm[i])));
+                for (let j = 0; j < rd.length; j++){
+                    checked++;
+                    const pc = await sql`
+                        SELECT FilePath FROM Attachments WHERE
+                        AttachmentID = ${rd[j]};
+                    `;
+                    if (pc.length != 0){
+                        fs.rmSync(pc[0].filepath);
+                        await sql`
+                            DELETE FROM Attachments WHERE
+                            AttachmentID = ${rd[j]};
+                        `
+                        corrections++;
+                    }
+                }
+                fs.rmSync(path.resolve('attachments/' + dm[i]));
+            }
+            else{
+                fs.rmSync(path.resolve('attachments/' + dm[i]));
+                corrections++;
+            }
         }
-    });
-    c.white('\n\n');
-
+    }
+    c.successText(` * ${checked} items checked, ${corrections} corrections made.\n\n`);
 }
 
 /**
@@ -1299,6 +1330,10 @@ let webApiListeners = {
                         }
                         if (newAttachmentId != -1){
                             await sql`
+                                DELETE FROM Attachments
+                                WHERE AttachmentID IN (SELECT AttachmentID FROM Tasks WHERE TaskID = ${taskid});
+                            `;
+                            await sql`
                                 UPDATE Tasks
                                 SET TaskName = ${taskName}, DueDate = ${dueDate}, Priority = ${taskPrio}, 
                                 Description = ${desc}, AttachmentID = ${newAttachmentId}, TaskID = ${taskid}
@@ -1605,6 +1640,10 @@ let webApiListeners = {
                 if (uid != -1){
                     try {
                         await sql`
+                            DELETE FROM Attachments
+                            WHERE AttachmentID IN (SELECT AttachmentID FROM Tasks WHERE TaskID = ${taskid});
+                        `;
+                        await sql`
                             DELETE FROM Tasks
                             WHERE TaskID = ${taskid};
                         `;
@@ -1648,6 +1687,8 @@ let resetAllDB = false;
 if (resetAllDB){
     reset().then(() => dbCheck().then(() => {
         app.listen(port, async () => {
+            
+            await cleanAttachments();
     
             await client.connect();
 
@@ -1659,6 +1700,8 @@ if (resetAllDB){
 else{
     dbCheck().then(() => {
         app.listen(port, async () => {
+
+            await cleanAttachments();
     
             await client.connect();
     
@@ -1667,3 +1710,7 @@ else{
         });
     });
 }
+
+setInterval(async () => {
+    await cleanAttachments();
+}, 3.6e+6);
