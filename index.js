@@ -10,13 +10,21 @@ import util from 'util';
 import {nanoid} from 'nanoid';
 import fs from 'fs';
 import * as archiver from 'archiver';
-import { get } from 'http';
+import pg from 'pg';
+import d from './config.json' assert { type: "json" };
 //////////////////////
 
 // Host our web app and define our APIs
 const app = express();
 app.use(express.json({limit: '1gb'})); // Set max attachment file size here.
 const port = 8080;
+
+// Connect secondary connection to SQL.
+const {Client} = pg;
+const client = new Client({
+    connectionString: `postgres://${d.username}:${d.password}@${d.host}:${d.port}/${d.database}`
+});
+
 
 console.clear();
 
@@ -31,6 +39,7 @@ const c = {
         console.log(chalk.bgRed(msg));
     },
     error: msg => {
+        console.error(msg)
         console.log(chalk.red(msg))
     },
     runBigProcess: msg => {
@@ -62,8 +71,7 @@ async function generatePasswordHash(password, salt = ''){
         if (salt.length < 16){
             salt = (await randomBytes(8)).toString('hex');
         }
-        const pbkdf2 = util.promisify(crypto.pbkdf2);
-        const hash = (await pbkdf2(password, salt, 100000, 64, 'sha512')).toString('hex');
+        const hash = crypto.createHash('sha512').update(password + salt).digest('hex');
         return {hash: hash, salt: salt};
     }
     catch(e){
@@ -192,12 +200,12 @@ async function dbCheck(){
     // Create users table
     try {
         await sql`CREATE TABLE Users(
-            UserID SERIAL NOT NULL PRIMARY KEY,
+            UserID VARCHAR(21) NOT NULL PRIMARY KEY,
             Username VARCHAR(100) NOT NULL,
-            Email VARCHAR(320),
-            PhoneNumber INT,
             Admin BOOLEAN NOT NULL,
             PfpAttachmentID INT,
+            Email VARCHAR(320),
+            PhoneNumber INT,
             PasswordHash VARCHAR(128) NOT NULL,
             PasswordSalt VARCHAR(16) NOT NULL,
             FOREIGN KEY (PfpAttachmentID) REFERENCES Attachments(AttachmentID)
@@ -207,8 +215,8 @@ async function dbCheck(){
         // Add the default admin user
         const adminCreds = await generatePasswordHash('admin');
         await sql`
-            INSERT INTO Users(Username, Admin, PasswordHash, PasswordSalt, PfpAttachmentID)
-            VALUES ('admin', TRUE, ${adminCreds.hash}, ${adminCreds.salt}, ${1});
+            INSERT INTO Users(UserID, Username, Admin, PasswordHash, PasswordSalt, PfpAttachmentID)
+            VALUES (${nanoid()}, 'admin', TRUE, ${adminCreds.hash}, ${adminCreds.salt}, ${1});
         `;
         c.white('* Users table created.');
     }
@@ -226,7 +234,7 @@ async function dbCheck(){
             Token VARCHAR(21) NOT NULL PRIMARY KEY,
             IssuedDate TIMESTAMP NOT NULL,
             ExpireDate TIMESTAMP,
-            UserID INT NOT NULL,
+            UserID VARCHAR(21) NOT NULL,
             FOREIGN KEY (UserID) REFERENCES Users(UserID)
                 ON DELETE CASCADE
                 ON UPDATE CASCADE
@@ -246,7 +254,7 @@ async function dbCheck(){
         await sql`CREATE TABLE Groups(
             GroupID SERIAL NOT NULL PRIMARY KEY,
             GroupName VARCHAR(100) NOT NULL,
-            AdminID INT NOT NULL,
+            AdminID VARCHAR(21) NOT NULL,
             FOREIGN KEY (AdminID) REFERENCES Users(UserID)
                 ON DELETE CASCADE
                 ON UPDATE CASCADE
@@ -324,7 +332,7 @@ async function dbCheck(){
     // Create user groups table (user in group)
     try {
         await sql`CREATE TABLE UserGroups(
-            UserID INT NOT NULL,
+            UserID VARCHAR(21) NOT NULL,
             GroupID INT NOT NULL,
             PRIMARY KEY (UserID, GroupID),
             FOREIGN KEY (UserID) REFERENCES Users(UserID)
@@ -486,7 +494,19 @@ async function dbCheck(){
     }
     c.notice(`# files caught: ${caught}`);*/
     // Test for junk attachments (TO-DO);
-    
+    c.runBigProcess('\n Cleaning attachments folder...');
+    let totalCleaned;
+    const allAttachments = await sql`
+        SELECT FilePath FROM Attachments;
+    `;
+    allAttachments.forEach(i => {
+        let fp = i.filepath;
+        // Check if filepath is a text file.
+        let ext = path.extname(fp);
+        if (ext == '.txt'){
+
+        }
+    });
     c.white('\n\n');
 
 }
@@ -777,9 +797,14 @@ let webApiListeners = {
                         bigGroups[i].tags = await sql`
                             SELECT * FROM Tags WHERE GroupID = ${bigGroups[i].groupid} ORDER BY TagName;
                         `;
-                    }
-                    for (let i = 0; i < bigGroups.length; i++){
                         bigGroups[i].filters = await getFilters(bigGroups[i].groupid);
+                        bigGroups[i].users = await sql`
+                            SELECT UserID FROM UserGroups WHERE GroupID = ${bigGroups[i].groupid} ORDER BY UserID;
+                        `;
+                        let u = bigGroups[i].users;
+                        for (let j = 0; j < u.length; j++){
+                            u[j] = await getUser(u[j].userid, token);
+                        }
                     }
                     res.send(str({
                         status: 'OK',
@@ -887,9 +912,12 @@ let webApiListeners = {
                             'week': 'DATEPART(week, DueDate), DATEPART(week, CreatedDate)',
                             'year': 'DATEPART(year, DueDate), DATEPART(year, CreatedDate)'
                         };
+                        if (typeof res1 == 'undefined'){
+                            res.sendError();
+                            return;
+                        }
                         //console.log(res1);
                         let sortBy = sortByMap[res1.sortby], groupBy = groupByMap[res1.groupby];
-                        
                         const res2 = await sql`
                             SELECT * FROM Tasks INNER JOIN TagsTables ON TagsTables.TaskID = Tasks.TaskID
                             WHERE Tasks.GroupID = ${groupid}
@@ -975,7 +1003,8 @@ let webApiListeners = {
                         let attachmentIdArray = [];
                         for (let fileName in attachments){
                             // Write file to attachments folder under a random name.
-                            let fpath = writeAttachment(fileName.split('.')[1], Buffer.from(attachments[fileName].hexData, 'hex'));
+                            let g = fileName.split('.')[1];
+                            let fpath = writeAttachment(g, Buffer.from(attachments[fileName].hexData, 'hex'));
                             // Let's enter it into the attachments table.
                             const fid = (await sql`
                                 INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) 
@@ -987,10 +1016,10 @@ let webApiListeners = {
                         }
                         if (attachmentIdArray.length > 1){
                             // More than 1 file was inserted, we need to make another file with the ids.
-                            let fpath = writeAttachment('txt', str(attachmentIdArray));
+                            let fpath = writeAttachment('echoattachments', str(attachmentIdArray));
                             const fid = (await sql`
                                 INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) 
-                                VALUES (${'attachments.txt'}, ${Date.now()}, ${Date.now()}, ${fpath})
+                                VALUES (${'attachments.echoattachments'}, ${Date.now()}, ${Date.now()}, ${fpath})
                                 RETURNING AttachmentID;
                                 `)[0].attachmentid;
                             ultimateFileId = fid;
@@ -1125,6 +1154,115 @@ let webApiListeners = {
                     res.sendInvalid();
                 }
             }
+            else if (endpoint === 'updateGroupName'){
+                if (uid != -1){
+                    let groupid = request[2], groupname = request[3];
+                    // We need to check if the current user is the admin.
+                    try {
+                        const group = await sql`
+                            SELECT * FROM Groups WHERE
+                            GroupID = ${groupid} AND AdminID = ${uid};
+                        `;
+                        if (group.length > 0){
+                            await sql`
+                                UPDATE Groups
+                                SET GroupName = ${groupname}
+                                WHERE GroupID = ${groupid};
+                            `;
+                            res.sendOK();
+                        }
+                        else{
+                            res.sendInvalid();
+                        }
+                    }
+                    catch(e) {
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'createNewGroup'){
+                let groupname = request[2];
+                if (uid != -1){
+                    try {
+                        // CREATION TRANSACTION
+                        await client.query(`BEGIN`);
+                        const gid = await client.query(`INSERT INTO Groups (GroupName, AdminID) VALUES ($1, $2) RETURNING GroupID`, [groupname, uid]);
+                        await client.query(`INSERT INTO UserGroups (UserID, GroupID) VALUES ($1, $2)`, [uid, gid.rows[0].groupid]);
+                        await client.query(`COMMIT`);
+                        res.sendOK();
+                    }
+                    catch(e){
+                        await client.query(`ROLLBACK`);
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'deleteGroup'){
+                let groupid = request[2];
+                if (uid != -1){
+                    try {
+                        const groups = await sql`
+                            SELECT * FROM Groups
+                            WHERE AdminID = ${uid};
+                        `;
+                        if (groups.length < 2){
+                            res.send(str({
+                                status: 'CANNOTDELETE'
+                            }));
+                        }
+                        else{
+                            const g = await sql`
+                                SELECT * FROM GROUPS
+                                WHERE GroupID = ${groupid} AND AdminID = ${uid};
+                            `
+                            // Delete this group.
+                            if (g.length > 0){
+                                /*
+                                Things to delete:
+                                Tasks,
+                                TaskViews,
+                                Tags,
+                                UserGroups,
+                                Groups
+                                */
+                               // DELETION TRANSACTION
+                               try {
+                                    await client.query(`BEGIN`);
+                                    await client.query(`DELETE FROM Tags WHERE GroupID = ${groupid};`);
+                                    await client.query(`DELETE FROM Tasks WHERE GroupID = ${groupid}`);
+                                    await client.query(`DELETE FROM TaskViews WHERE VaultID = ${groupid}`);
+                                    await client.query(`DELETE FROM UserGroups WHERE GroupID = ${groupid}`);
+                                    await client.query(`DELETE FROM Groups WHERE GroupID = ${groupid}`);
+                                    await client.query(`COMMIT`);
+                                    res.sendOK();
+                               }
+                               catch(e){
+                                    await client.query(`ROLLBACK`);
+                                    c.error(e);
+                               }
+                            }
+                            else{
+                                res.sendInvalid();
+                            }
+                        }
+                    }
+                    catch(e) {
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
             else if (endpoint === 'updateTask'){
                 if (uid != -1){
                     let taskName = request[2], dueDate = request[3], taskPrio = request[4], taskid = request[5];
@@ -1143,7 +1281,8 @@ let webApiListeners = {
                             let fdata;
                             fdata = [];
                             for (let fname in attachments){
-                                let path = writeAttachment(fname.split('.')[1], Buffer.from(attachments[fname].hexData, 'hex'));
+                                let g = fname.split('.')[1];
+                                let path = writeAttachment(g, Buffer.from(attachments[fname].hexData, 'hex'));
                                 // Put this in the attachments table.
                                 const insertion = (await sql`
                                     INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
@@ -1152,10 +1291,10 @@ let webApiListeners = {
                                 `)[0].attachmentid;
                                 fdata.push(insertion); //insert our new id into the array.
                             }
-                            let n1 = writeAttachment(nanoid() + '.txt', JSON.stringify(fdata));
+                            let n1 = writeAttachment(nanoid() + '.echoattachments', JSON.stringify(fdata));
                             newAttachmentId = (await sql`
                                 INSERT INTO Attachments(FileName, DateAdded, ModifiedDate, FilePath) VALUES
-                                (${nanoid() + '.txt'}, ${Date.now()}, ${Date.now()}, ${n1}) RETURNING AttachmentID;
+                                (${nanoid() + '.echoattachments'}, ${Date.now()}, ${Date.now()}, ${n1}) RETURNING AttachmentID;
                                 `)[0].attachmentid;
                         }
                         if (newAttachmentId != -1){
@@ -1207,7 +1346,7 @@ let webApiListeners = {
                     // First we should get the entry from the table.
                     let data = await getAttachment(attachmentid);
                     if (data != -1){
-                        if (data.fileName.split('.')[1] == 'txt'){
+                        if (data.fileName.split('.')[1] == 'echoattachments'){
                             // Multi file
                             try {
                                 let fdata = JSON.parse(Buffer.from(data.hexData, 'hex').toString('utf-8'));
@@ -1251,7 +1390,8 @@ let webApiListeners = {
                                 for (let i = 0; i < fdata.length; i++){
                                     let aid = fdata[i];
                                     let ddata = await getAttachment(aid);
-                                    archive.append(Buffer.from(ddata.hexData, 'hex'), {name: ddata.fileName});
+                                    let fnn = ddata.fileName;
+                                    archive.append(Buffer.from(ddata.hexData, 'hex'), {name: fnn});
                                 }
                                 archive.finalize();
                             }
@@ -1281,7 +1421,6 @@ let webApiListeners = {
                         }
                     }
                     else{
-                        console.log(data);
                         res.send(str({
                             status: 'NOFILE'
                         }));
@@ -1295,7 +1434,8 @@ let webApiListeners = {
                 let serveId = request[2];
                 if (uid != -1){
                     if (Object.hasOwn(serve, serveId)){
-                        res.sendFile(serve[serveId]);
+                        res.download(serve[serveId]);
+                        delete serve.serveId;
                     }
                     else{
                         res.sendError();
@@ -1305,9 +1445,156 @@ let webApiListeners = {
                     res.sendInvalid();
                 }
             }
-            else if (endpoint === 'sendMessage'){
+            else if (endpoint === 'removeUser'){
                 if (uid != -1){
-
+                    let userid = request[2], groupid = request[3];
+                    try {
+                        await sql`
+                            DELETE FROM UserGroups WHERE
+                            UserID = ${userid} AND GroupID = ${groupid};
+                        `;
+                        res.sendOK();
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'createNewUser'){
+                if (uid != -1){
+                    let username = request[2];
+                    try{
+                        const alreadyExist = await sql`
+                            SELECT * FROM Users WHERE Username = ${username};
+                        `;
+                        if (alreadyExist.length != 0){
+                            res.send(str({
+                                status: 'USEREXISTS'
+                            }));
+                            return;
+                        }
+                        const pswd = await generatePasswordHash('asdfpassword321');
+                        await sql`
+                            INSERT INTO Users (UserID, Username, Email, PhoneNumber, Admin, PfpAttachmentID, PasswordHash, PasswordSalt)
+                            VALUES (${nanoid()}, ${username}, NULL, NULL, ${false}, ${1}, ${pswd.hash}, ${pswd.salt}) RETURNING UserID;
+                        `;
+                        res.send(str({
+                            status: 'OK',
+                            password: 'asdfpassword321'
+                        }));
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'editUser'){
+                if (uid != -1){
+                    try {
+                        let passwordhash = req.body.passwordhash, salt = req.body.passwordsalt, 
+                        pfpHex = req.body.hex, ext = req.body.ext, username = req.body.username;
+                        let pth = null;
+                        if (pfpHex != null){
+                            const o = writeAttachment(ext, Buffer.from(pfpHex, 'hex'));
+                            pth = (await sql`
+                                INSERT INTO Attachments (FileName, DateAdded, ModifiedDate, FilePath)
+                                VALUES (${nanoid() + '.' + ext}, ${Date.now()}, ${Date.now()}, ${o}) RETURNING AttachmentID;
+                            `)[0].attachmentid;
+                        }
+                        let ztrue = (pth != null) && (typeof pth != 'undefined');
+                        if (passwordhash != null && salt != null){
+                            await sql`
+                                UPDATE Users
+                                SET PasswordHash = ${passwordhash},
+                                PasswordSalt = ${salt}
+                                WHERE UserID = ${uid};
+                            `;
+                            res.sendOK();
+                        }
+                        else if (ztrue){
+                            await sql`
+                                UPDATE Users
+                                SET PfpAttachmentID = ${pth}
+                                WHERE UserID = ${uid};
+                            `;
+                            res.sendOK();
+                        }
+                        else if (username != null){
+                            await sql`
+                                UPDATE Users
+                                SET Username = ${username}
+                                WHERE UserID = ${uid}
+                            `;
+                            res.sendOK();
+                        }
+                        else{
+                            res.sendInvalid();
+                        }
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
+                }
+                else{
+                    res.sendInvalid();
+                }
+            }
+            else if (endpoint === 'addUserToGroup'){
+                if (uid != -1){
+                    let uuid = request[2], groupid = request[3];
+                    if (uuid == uid){
+                        res.send(str({
+                            status: 'USERNOTFOUND'
+                        }));
+                        return;
+                    }
+                    try {
+                        const userExists = await sql`
+                            SELECT * FROM Users WHERE UserID = ${uuid};
+                        `;
+                        // Are we admin?
+                        const isAdmin = await sql`
+                            SELECT * FROM Groups WHERE AdminID = ${uid} AND GroupID = ${groupid};
+                        `
+                        if (isAdmin.length == 0){
+                            res.sendInvalid();
+                            return;
+                        }
+                        if (userExists.length > 0){
+                            const alreadyAdded = await sql`
+                                SELECT * FROM UserGroups WHERE UserID = ${uuid} AND GroupID = ${groupid};
+                            `;
+                            if (alreadyAdded > 0){
+                                res.send(str({
+                                    status: 'INGROUP'
+                                }))
+                                return;
+                            }
+                            await sql`
+                                INSERT INTO UserGroups(UserID, GroupID)
+                                VALUES (${uuid}, ${groupid});
+                            `;
+                            res.sendOK();
+                        }
+                        else{
+                            res.send(str({
+                                status: 'USERNOTFOUND'
+                            }));
+                        }
+                    }
+                    catch(e){
+                        c.error(e);
+                        res.sendError();
+                    }
                 }
                 else{
                     res.sendInvalid();
@@ -1357,16 +1644,26 @@ process.on('SIGINT', () => {
     process.exit();
 });
 
-dbCheck().then(() => {
-    app.listen(port, () => {
-        c.success(` App listening on port ${port} `);
-        c.white(`Local URL: http://localhost:${port}`);
+let resetAllDB = false;
+if (resetAllDB){
+    reset().then(() => dbCheck().then(() => {
+        app.listen(port, async () => {
+    
+            await client.connect();
+
+            c.success(` App listening on port ${port} `);
+            c.white(`Local URL: http://localhost:${port}`);
+        });
+    }));
+}
+else{
+    dbCheck().then(() => {
+        app.listen(port, async () => {
+    
+            await client.connect();
+    
+            c.success(` App listening on port ${port} `);
+            c.white(`Local URL: http://localhost:${port}`);
+        });
     });
-});
-/*
-reset().then(() => dbCheck().then(() => {
-    app.listen(port, () => {
-        c.success(` App listening on port ${port} `);
-        c.white(`Local URL: http://localhost:${port}`);
-    });
-}));*/
+}

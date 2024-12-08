@@ -19,3 +19,10 @@
 ['dl', token, attachmentid] -> 
 ['sendMessage', token] -> {'status': 'OK'}
 ['serv', token, serveId] (Download endpoint)
+['updateGroupName', token, groupid, groupname] -> {'status' : 'OK'}
+['deleteGroup', token, groupid] -> {'status': 'OK'}
+['createNewGroup', token, groupName] -> {'status': 'OK'}
+['addUserToGroup', token, uid, groupid] -> {'status' : 'OK'}
+['createNewUser', token, username] -> {'status': 'OK'}
+['editUser', token] -> {'status' : 'OK'}
+['removeUser', token, userid, groupid] -> {'status' : 'OK'}

@@ -78,17 +78,25 @@ TO-DO list app
       .views {
         display: none;
       }
-      #profile-menu {
+      #profile-view-item {
         cursor: pointer;
         padding-right: 0.5rem;
       }
-      #profile-menu:hover {
+      #profile-view-item:hover {
         border-radius: 20px;
         background-color: #ededed;
       }
       #offcanvas-toggler {
         border:0;
       }
+      #inviteCode {
+        color: white;
+      }
+      #inviteCode:hover, #inviteCode:active{
+        color: black;
+        cursor: pointer;
+      }
+      
       #logoutButton {
         cursor: pointer;
         color: lightcoral;
@@ -137,14 +145,76 @@ TO-DO list app
         border-radius: 20px;
         border: transparent;
       }
+      .overlay {
+        height: 100%;
+        width: 100%;
+        display: none;
+        position: fixed;
+        z-index: 1200;
+        top: 0;
+        left: 0;
+        background-color: rgb(0,0,0);
+        background-color: rgba(0,0,0, 0.6);
+      }
+
+      .overlay-content {
+        user-select: none;
+        color: white;
+        position: relative;
+        top: 25%;
+        width: 100%;
+        text-align: center;
+        margin-top: 30px;
+      }
+
+      .overlay a {
+        padding: 8px;
+        text-decoration: none;
+        font-size: 36px;
+        color: #818181;
+        display: block;
+        transition: 0.3s;
+      }
+
+      .overlay a:hover, .overlay a:focus {
+        color: #f1f1f1;
+      }
+
+      .overlay .closebtn {
+        position: absolute;
+        top: 20px;
+        right: 45px;
+        font-size: 60px;
+      }
+
+      @media screen and (max-height: 450px) {
+        .overlay a {font-size: 20px}
+        .overlay .closebtn {
+        font-size: 40px;
+        top: 15px;
+        right: 35px;
+        }
+      }
     </style>
   </head>
   <body>
+
+    <div id="loading_overlay" class="overlay">
+      <div class="overlay-content">
+        <h3>Loading, please wait...</h3>
+        <div class="container">
+          <div class="spinner-border text-light" role="status">
+            <span class="sr-only">Loading...</span>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- pages -->
     <div class="pages">
       <div id="auth" class="container">
         <br>  
+        <h4><b>Project Echo</b>&nbsp;<i data-feather="check"></i></h4><br><br>
         <!-- login block -->
         <div class="card">
           <h5 class="card-header">Login</h5>
@@ -165,15 +235,6 @@ TO-DO list app
 
         <br><br>
 
-        <!-- register block -->
-        <div class="card">
-          <h5 class="card-header">Don't have an account?</h5>
-          <div class="card-body">
-            <p>Unfortunately we are in an invite-only private phase. If you do not already have or know your login, there is no way to 
-              get access to our service at this time. Please check back for additional updates on our service. Thank you.</p>
-          </div>
-        </div>
-
       </div>
       <div id="main-page" class="page">
         <nav class="navbar fixed-bottom bg-body-tertiary">
@@ -185,7 +246,7 @@ TO-DO list app
             <!-- main menu offcanvas -->
             <div class="offcanvas offcanvas-end" tabindex="-1" id="navbar-offcanvas">
               <div class="offcanvas-header">
-                <h5 id="profile-menu" class="offcanvas-title" data-bs-dismiss="offcanvas"><img class="self-pfp" style="width:3rem;border-radius:50%;">&nbsp; <span id="greeting">test</span></h5>
+                <h5 onclick="changePage('profile-view')" data-bs-dismiss="offcanvas" id="profile-view-item" class="offcanvas-title" data-bs-dismiss="offcanvas"><img class="self-pfp" style="width:3rem;border-radius:50%;">&nbsp; <span id="greeting">test</span></h5>
                 <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
               </div>
               <div class="offcanvas-body">
@@ -206,11 +267,8 @@ TO-DO list app
                   <li class="nav-item">
                     <a data-bs-dismiss="offcanvas" id="people-view-item" class="nav-link" onclick="changePage('people-view')">People</a>
                   </li>
-                  <li class="nav-item">
-                    <a data-bs-dismiss="offcanvas" id="settings-view-item" class="nav-link" onclick="changePage('settings-view')">Settings</a>
-                  </li>
                   <li class="nav-item" id="logoutButton">
-                    <a class="nav-link" style="color: lightcoral;">Log Out</a>
+                    <a class="nav-link" style="color: lightcoral;" onclick="storage.delete('sessionToken');location.reload();">Log Out</a>
                   </li>
                 </ul>
               </div>
@@ -238,6 +296,13 @@ TO-DO list app
                 <script>
                   // Script for filter form dynamics.
                   // This is just here for ease of development.
+
+                  function openLoading(){
+                    gebi('loading_overlay').style.display = 'block';
+                  }
+                  function closeLoading(){
+                    gebi('loading_overlay').style.display = 'none';
+                  }
                   
                   let cef, cvf;
 
@@ -280,6 +345,13 @@ TO-DO list app
                             if (l[i].completeddate != null){
                               l.splice(i, 1);
                             }
+                          }
+                        }
+                        // Hide tasks not in our group.
+                        let l = window.data.tasks;
+                        for (let i = l.length - 1; i >= 0; i--){
+                          if (l[i].groupid != currentVaultId){
+                            l.splice(i, 1);
                           }
                         }
 
@@ -598,6 +670,7 @@ TO-DO list app
                         ])}`;
                         f.method = "post";
                         f.target = "_blank";
+                        f.setAttribute('download', data.serveId);
                         f.submit();
                         //window.open(`/serv/${data.serveId}`, '_blank').focus();
                       }
@@ -1017,7 +1090,7 @@ TO-DO list app
                     </div>
                     <div class="mb-3">
                       <label for="taskview-showarchived">Show completed: </label>
-                      <input type="checkbox" id="taskview-showarchived">
+                      <input type="checkbox" class="checkbox-round" id="taskview-showarchived">
                     </div> 
                   </form>
                 </div>
@@ -1025,7 +1098,9 @@ TO-DO list app
             </div>
             <div id="vaults-view" class="views">
               <h4>Vaults</h4>
-              <p>Each vault contains separate tasks and tags. You can share vaults with others.</p><br><br>
+              <p>Each vault contains separate tasks and tags. You can share vaults with others.</p>
+              <button onclick="createNewGroup()" type="button" class="btn w-100 btn-primary">Create new vault</button>
+              <br><br><br>
               <div id="vaults">
                 <div class="card">
                   <div class="card-body">
@@ -1095,10 +1170,158 @@ TO-DO list app
               <br><br><br><br>
             </div>
             <div id="people-view" class="views">
-              g
+              <h4>People</h4>
+              <p id="people_desc">Here are the people who have access to this vault.</p>
+              <button id="adduserbutton" onclick="createNewUser()" type="button" class="btn btn-outline-warning w-100"><b>ADMIN</b>: Create new user</button>
+              <br><br>
+              <button onclick="addPersonToVault(currentVaultId)" type="button" class="btn btn-success w-100">Invite person</button>
+              <br><br><br>
+              <div id="people-list">
+                
+              </div>
             </div>
-            <div id="settings-view" class="views">
-              b
+            <div id="profile-view" class="views">
+              <div class="row">
+                <div class="col-10">
+                  <h5 style="padding: 0; margin: 0;">My Profile</h5>
+                  <span style="font-size: 12px;" id="inviteCode"></span>
+                </div>
+                <div class="col-2">
+                  <img class="self-pfp" style="float: right; height: 2rem; border-radius: 50px;">
+                </div>
+              </div>
+              <br><br><br>
+              <button onclick="uploadPfp()" type="button" class="btn btn-outline-primary w-100">Change profile picture</button><br><br>
+              <button data-bs-toggle="offcanvas" data-bs-target="#password-ofc" type="button" class="btn btn-outline-secondary w-100">Change password</button><br><br>
+              <button onclick="changeUsername()" type="button" class="btn btn-outline-warning w-100">Change username</button>
+              <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="password-ofc">
+                <div class="offcanvas-header">
+                  <h5 class="offcanvas-title">Change Password</h5>
+                  <button type="button" class="btn-close text-reset" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+                </div>
+                <div class="offcanvas-body">
+                  <form action="javascript:void(0);" onsubmit="changePassword()">
+                    <div class="mb-3">
+                      <label for="password-1">Enter your new password: </label>
+                      <input type="password" class="form-control" name="password-1" id="password-1">
+                    </div>
+                    <div class="mb-3">
+                      <label for="password-2">Confirm password: </label>
+                      <input type="password" class="form-control" name="password-2" id="password-2">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Change password</button>
+                  </form>
+                </div>
+              </div>
+              <script>
+
+                function changeUsername(){
+                  let pt = prompt('Enter new username: ');
+                  if (pt != null && pt.length >= 1){
+                    request(['editUser', sessionToken], true, {
+                      passwordhash: null,
+                      salt: null,
+                      username: pt,
+                      hex: null,
+                      ext: null
+                    }).then(data => {
+                      if (data.status == 'OK'){
+                        location.reload();
+                      }
+                      else{
+                        alert('An error has occurred.');
+                        location.reload();
+                      }
+                    })
+                  }
+                }
+
+                async function changePassword(){
+                  let ad = gebi('password-1'), ae = gebi('password-2');
+                  let pt = ad.value, pt2 = ae.value;
+                  if (pt != null && pt.length > 6 && pt2 != null && pt2.length > 6){
+                    if (pt == pt2){
+                      let salt = Buffer.from(crypto.getRandomValues(new Uint8Array(8))).toString('hex');
+                      const hash = Buffer.from(new Uint8Array(await window.crypto.subtle.digest('SHA-512', new TextEncoder().encode(pt + salt)))).toString('hex');
+                      request(['editUser', sessionToken], true, {
+                        passwordhash: hash,
+                        passwordsalt: salt,
+                        username: null,
+                        hex: null,
+                        ext: null
+                      }).then(data => {
+                            if (data.status == 'OK'){
+                              location.reload();
+                            }
+                            else{
+                              alert('An error has occurred.');
+                              console.log(data);
+                              //location.reload();
+                            }
+                        });
+                    }
+                    else{
+                      alert(`Passwords do not match, please try again.`);
+                    }
+                  }
+                  else{
+                    alert('Password must be >6 characters, invalid input.');
+                  }
+                }
+
+                function uploadPfp(){
+                  let input = document.createElement('input');
+                  input.type = 'file';
+                  input.onchange = e => {
+                    console.log(input.files);
+                    let fileReader = new FileReader();
+                    let file = input.files[0];
+                    function d(e){
+                      alert(`Error reading file ${file.name}, skipping file.`);
+                      console.error(e);
+                    }
+                    fileReader.onerror = d;
+                    fileReader.onabort = d;
+                    fileReader.onloadend = data => {
+                      let compatTypes = [
+                        'image/apng',
+                        'image/gif',
+                        'image/jpeg',
+                        'image/png',
+                        'image/svg+xml',
+                        'image/webp'
+                      ];
+                      let type = file.type;
+                      if (!compatTypes.includes(type)){
+                        alert('Invalid image type. Must be of type(s): ' + 
+                          compatTypes.map(i => i.replace('image/', '')).join(', ')
+                        );
+                      }
+                      else{
+                        request(['editUser', sessionToken], true, {
+                          passwordhash: null,
+                          salt: null,
+                          username: null,
+                          hex: Buffer.from(new Uint8Array(fileReader.result)).toString('hex'),
+                          ext: file.type.replace('image/', '')
+                        }).then(data => {
+                            if (data.status == 'OK'){
+                              location.reload();
+                            }
+                            else{
+                              alert('An error has occurred.');
+                              location.reload();
+                            }
+                        });
+                      }
+                    }
+                    fileReader.readAsArrayBuffer(file);
+                  }
+                  input.click();
+
+                }
+
+              </script>
             </div>
           </div>
         </div>
@@ -1267,6 +1490,65 @@ TO-DO list app
         }
         // Update.
         refreshClient();
+      }
+
+      function addPersonToVault(vid){
+        let userid = prompt('Please enter their user code: ');
+        if (userid != null && userid.length == 21){
+          request(['addUserToGroup', sessionToken, userid, vid]).then(data => {
+            if (data.status == 'OK'){
+              location.reload();
+            }
+            else if (data.status == 'USERNOTFOUND'){
+              alert('Invalid user code.');
+            }
+            else if (data.status == 'INGROUP'){
+              alert('User is already in this vault.');
+            }
+            else{
+              alert('An error has occurred.');
+            }
+          });
+        }
+        else{
+          alert('Invalid user code.');
+        }
+      }
+
+      function createNewUser(){
+        let username = prompt('Please enter a username: ');
+        if (!(username != null && username.length >= 1)){
+          alert('Invalid username, user not created.');
+          return;
+        }
+        request(['createNewUser', sessionToken, username]).then(data => {
+          if (data.status == 'OK'){
+            navigator.clipboard.writeText(data.password);
+            alert(`User ${username} has been created with password: ${data.password} (copied to clipboard)`);
+          }
+          else if (data.status == 'USEREXISTS'){
+            alert('Username already exists.');
+          }
+          else{
+            alert('An error has occurred.');
+            location.reload();
+          }
+        });
+      }
+
+      function createNewGroup(){
+        let groupName = prompt('Enter your new vault name: ');
+        if (!(groupName == null || groupName.length == '')){
+          request(['createNewGroup', sessionToken, groupName]).then(data => {
+            if (data.status == 'OK'){
+              location.reload();
+            }
+            else{
+              alert('An error has occurred.');
+              location.reload();
+            }
+          });
+        }
       }
 
       /**
@@ -1452,6 +1734,76 @@ TO-DO list app
         return false;
       }
 
+      function gotoVault(groupid){
+        window.data.groups.forEach(group => {
+          if (group.groupid == groupid){
+            window.currentGroup = group;
+            storage.write('currentVaultId', groupid);
+            location.reload();
+          }
+        });
+      }
+
+      function editVault(groupid){
+        let newName = prompt('Enter new vault name: ');
+        if (!(newName == null || newName.length == 0)){
+          request(['updateGroupName', sessionToken, groupid, newName]).then(data => {
+            if (data.status == 'OK'){
+              location.reload();
+            }
+            else if (data.status == 'INVALID'){
+              alert('You do not have permission to perform this action.');
+            }
+            else if (data.status == 'ERROR'){
+              alert('An error has occurred while performing this action.');
+              location.reload();
+            }
+          });
+        }
+      }
+
+      function deleteVault(groupid){
+        let search;
+        window.data.groups.forEach(group => {
+          if (group.groupid == groupid){
+            search = group.groupname;
+          }
+        })
+        let pt = prompt(`Please type ${search} to confirm you want to delete.`);
+        if (pt != search){
+          alert('Nothing was deleted.');
+        }
+        else{
+          request(['deleteGroup', sessionToken, groupid]).then(data => {
+            if (data.status == 'OK'){
+              location.reload();
+            }
+            else if (data.status == 'CANNOTDELETE'){
+              alert('Cannot delete your last vault.');
+            }
+            else if (data.status == 'INVALID'){
+              alert('You do not have permission to perform this action.')
+              location.reload()
+            }
+            else {
+              alert('An error has occurred.');
+            }
+          });
+        }
+      }
+
+      function removeUserFromGroup(userid){
+        request(['removeUser', sessionToken, userid, window.currentGroup.groupid]).then(data => {
+          if (data.status == 'OK'){
+            location.reload();
+          }
+          else{
+            alert('An error has occurred.');
+            location.reload();
+          }
+        });
+      }
+
       function refreshClient(){
         let fetchStartTime = performance.now();
         request(['getClientPackageUpdate', sessionToken]).then(data => {
@@ -1478,8 +1830,48 @@ TO-DO list app
             // Set current vault if not exist before.
             if (currentVaultId === -1){
               currentVaultId = data.groups[0].groupid;
+              window.currentGroup = data.groups[0];
               storage.write('currentVaultId', currentVaultId);
             }
+            else{
+              for (let i = 0; i < data.groups.length; i++){
+                if (data.groups[i].groupid == currentVaultId){
+                  window.currentGroup = data.groups[i];
+                }
+              }
+              if (typeof window.currentGroup == "undefined"){
+                currentVaultId = data.groups[0].groupid;
+                window.currentGroup = data.groups[0];
+                storage.write('currentVaultId', currentVaultId);
+              }
+            }
+            let htmlList = '';
+            window.currentGroup.users.forEach(user => {
+              let pd = user.pfp;
+              let fileExt = pd.fileName.split('.')[1];
+              let pdEmbedData = `data:image/${fileExt};base64,${Buffer.from(pd.hexData, 'hex').toString('base64')}`
+              let dm = `
+              <br>
+                <div class="card">
+                  <div class="card-body">
+                    <div class="row">
+                      <div class="col-10">
+                        <h5>${user.username} &nbsp;<span style="background-color:lightblue;padding:5px;border-radius:25px;font-size:12px;" ${window.currentGroup.adminid == user.userid ? '' : 'hidden'}>Owner</span></h5>
+                      </div>
+                      <div class="col-2">
+                        <img src="${pdEmbedData}" style="float: right; height: 2rem; border-radius: 50px;">
+                      </div>
+                    </div>
+                  </div>
+                  <div class="card-footer" ${user.userid == window.currentGroup.adminid ? 'hidden' : ''}>
+                    <button onclick="removeUserFromGroup('${user.userid}')" type="button" class="btn btn-outline-danger">Remove</button>
+                  </div>
+                </div>
+              `;
+              htmlList += dm;
+            });
+            let ababa = gebi('people-list');
+            ababa.innerHTML = htmlList;
             // Set greeting.
             gebi('greeting').innerHTML = `Hi, ${data.me.username}`;
             // Set vaults entries
@@ -1490,22 +1882,28 @@ TO-DO list app
               if (currentVaultId === group.groupid){
                 window.currentGroup = group;
               }
-              baseCard.innerHTML = `
+              // Get number of incomplete tasks.
+              let incomplete = 0;
+              window.data.tasks.forEach(v => {
+                if (v.completeddate == null && v.groupid == group.groupid){
+                  incomplete++;
+                }
+              });
+              baseCard.innerHTML = `<br>
                   <div class="card">
                     <div class="card-body" data-groupid="${group.groupid}">
-                      <h5 class="card-title">${currentVaultId === group.groupid ? '(Current) ' : ''}${group.groupname}</h5>
+                      <h5 class="card-title">${group.groupname}&nbsp;<span style="float:right;border:2px solid;padding:5px;border-radius:25px;font-size:12px;" ${group.adminid == window.data.me.userid ? '' : 'hidden'}>Your vault</span>&nbsp;<span style="margin-left:5px;margin-right:5px;float:right;background-color:lightgreen;padding:5px;border-radius:25px;font-size:12px;" ${currentVaultId === group.groupid ? '' : 'hidden'}>Viewing</span></h5>
                       <small>
-                      <i data-feather="users" style="width: 1rem;"></i> 3 people
+                      <i data-feather="users" style="width: 1rem;"></i> ${group.users.length} ${group.users.length == 1 ? 'person' : 'people'}
                       &nbsp;
-                      <i data-feather="check-circle" style="width: 1rem;"></i> 5 tasks
+                      <i data-feather="check-circle" style="width: 1rem;"></i> ${incomplete} tasks
                       &nbsp;
-                      <i data-feather="calendar" style="width: 1rem;"></i> Upcoming task in 3 days
-                    </small>
+                      </small>
                     </div>
-                    <div class="card-body">
-                      <button type="button" class="btn btn-primary" style="display:${(currentVaultId === group.groupid) ? 'none' : 'inline'};">Go to vault</button>
-                      <button type="button" class="btn btn-secondary" style="display:${(group.adminid === uid) ? 'inline' : 'none'};">Edit vault</button>
-                      <button type="button" class="btn btn-danger" style="display:${(group.adminid === uid) ? 'inline' : 'none'};">Delete vault</button>
+                    <div class="card-footer" ${(currentVaultId === group.groupid) && !(group.adminid === uid) && !(group.adminid === uid) ? 'hidden' : ''}>
+                      <button onclick="gotoVault(${group.groupid})" type="button" class="btn btn-primary" style="display:${(currentVaultId === group.groupid) ? 'none' : 'inline'};">Go to vault</button>
+                      <button onclick="editVault(${group.groupid})" type="button" class="btn btn-secondary" style="display:${(group.adminid === uid) ? 'inline' : 'none'};">Edit vault</button>
+                      <button onclick="deleteVault(${group.groupid})" type="button" class="btn btn-danger" style="display:${(group.adminid === uid) ? 'inline' : 'none'};">Delete vault</button>
                     </div>
                   </div>
               `;
@@ -1567,6 +1965,18 @@ TO-DO list app
            console.log(`Client rendering time: ${(finishRenderingTime - receivedTime).toFixed(3)}ms`);
            console.log(`Request-to-response performace time: ${(receivedTime - fetchStartTime).toFixed(3)}ms`);
            console.log(`%cRequest-to-finish time: ${(finishRenderingTime - fetchStartTime).toFixed(3)}ms`, 'color: green;');
+         
+           // Are we admin of the current vault.
+           if (!window.data.me.admin){
+            let zczc = gebi('adduserbutton');
+            zczc.setAttribute('hidden', '');
+           }
+
+           gebi('inviteCode').innerHTML = `${window.data.me.userid}`
+           gebi('inviteCode').onclick = () => {
+            navigator.clipboard.writeText(window.data.me.userid);
+           }
+
           }
         });
       }
@@ -1604,6 +2014,7 @@ TO-DO list app
        * @return Object
        */
       async function request(request, hasBody = false, bodyContent = false){
+        openLoading();
         try {
           if (!hasBody){
             const ret = await fetch('api/' + encodeURIComponent(JSON.stringify(request)), {
@@ -1612,7 +2023,9 @@ TO-DO list app
             if (!ret.ok){
               throw new Error(`Response status: ${response.status}`);
             }
-            return await ret.json();
+            let d = await ret.json();
+            closeLoading();
+            return d;
           }
           else{
             const ret = await fetch('api/' + encodeURIComponent(JSON.stringify(request)), {
@@ -1625,10 +2038,13 @@ TO-DO list app
             if (!ret.ok){
               throw new Error(`Response status: ${response.status}`);
             }
-            return await ret.json();
+            let d = await ret.json();
+            closeLoading();
+            return d;
           }
         }
         catch (e) {
+          closeLoading();
           //alert('Error in request, see console for details. Please refresh the page.');
           console.error(`Error while handling route ${request}`);
           console.error(e.message);
