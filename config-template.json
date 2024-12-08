@@ -3,5 +3,8 @@
   "password" : "postgres",
   "host" : "localhost",
   "port" : "5432",
-  "database" : "sampledb"
+  "database" : "sampledb",
+  "https" : false,
+  "key" : "",
+  "cert" : ""
 }
