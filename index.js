@@ -12,6 +12,8 @@ import fs from 'fs';
 import * as archiver from 'archiver';
 import pg from 'pg';
 import d from './config.json' assert { type: "json" };
+import https from 'https';
+import http from 'http';
 //////////////////////
 
 // Host our web app and define our APIs
@@ -1683,33 +1685,26 @@ process.on('SIGINT', () => {
     process.exit();
 });
 
-let resetAllDB = false;
-if (resetAllDB){
-    reset().then(() => dbCheck().then(() => {
-        app.listen(port, async () => {
-            
-            await cleanAttachments();
-    
-            await client.connect();
+let resetDB = false;
+let httpsMode = d.https;
+let httpServer = http.createServer(app);
+if (resetDB)
+    await reset();
+await dbCheck();
 
-            c.success(` App listening on port ${port} `);
-            c.white(`Local URL: http://localhost:${port}`);
+httpServer.listen(port, async () => {
+    await cleanAttachments();
+    await client.connect();
+    c.success(` HTTP mode enabled on port ${port}.`);
+    if (httpsMode){
+        let key = fs.readFileSync(path.resolve(d.key));
+        let cert = fs.readFileSync(path.resolve(d.cert));
+        let httpsServer = https.createServer({key: key, cert: cert}, app);
+        httpsServer.listen(443, () => {
+            c.success(` HTTPS mode enabled on port 443.`);
         });
-    }));
-}
-else{
-    dbCheck().then(() => {
-        app.listen(port, async () => {
-
-            await cleanAttachments();
-    
-            await client.connect();
-    
-            c.success(` App listening on port ${port} `);
-            c.white(`Local URL: http://localhost:${port}`);
-        });
-    });
-}
+    }
+});
 
 setInterval(async () => {
     await cleanAttachments();
