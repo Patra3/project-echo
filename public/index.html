@@ -1128,7 +1128,7 @@ TO-DO list app
               <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskEditorOffcanvas"><i data-feather="plus-circle"></i> &nbsp;New Task</button>
               <button onclick="changePage('tags-view')" class="btn" type="button" style="background-color: purple; color: white;"><i data-feather="tag"></i>&nbsp; Create Tag</button>
               <button onclick="changePage('filters-view')" class="btn btn-success" type="button"><i data-feather="layout"></i>&nbsp; Create Filter</button>
-              <button style="margin-top: 5px;" id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Apply Filter</button>
+              <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Apply Filter</button>
               
               <br><br>
               <div id="tasks-list">
@@ -1698,7 +1698,7 @@ TO-DO list app
               }
             });
             if (isEdit){
-              request(['updateTask', sessionToken, taskName, dueDate, taskPrio, isEditId], true, {
+              request(['updateTask', sessionToken, taskName, new Date(dueDate).toString(), taskPrio, isEditId], true, {
                 tags: taskTags,
                 attachments: fileData,
                 desc: taskDesc,
@@ -1715,7 +1715,7 @@ TO-DO list app
               });
             }
             else{
-              request(['createNewTask', sessionToken, taskName, dueDate, taskPrio], true, {
+              request(['createNewTask', sessionToken, taskName, new Date(dueDate).toString(), taskPrio], true, {
                 tags: taskTags,
                 attachments: fileData,
                 desc: taskDesc,
