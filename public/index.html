@@ -42,13 +42,10 @@ TO-DO list app
 
     <script>
       import('https://cdn.skypack.dev/date-fns').then(d => {
+        if (typeof d == 'undefined'){
+          location.reload();
+        }
         window.datefns = d;
-        window.setInterval(() => {
-          if (!('datefns' in window)){
-            // Critical component
-            location.reload();
-          }
-        }, 100);
       }).catch(e => {
         // Unacceptable error, have to reload.
         // Maybe it's down.
@@ -421,10 +418,7 @@ TO-DO list app
                           }
                           else if (r.length > 0){
                             let sat = false;
-                            if (!Object.hasOwn(tasks[zxc], 'tags')){
-                              sat = true;
-                            }
-                            else{
+                            if (Object.hasOwn(tasks[zxc], 'tags')){
                               let tasktg = tasks[zxc].tags.map(tag => tag.tagid);
                               tasktg.forEach(v => {
                                 if (r.includes(v)){
