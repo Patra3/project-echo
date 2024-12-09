@@ -381,6 +381,22 @@ TO-DO list app
                             l.splice(i, 1);
                           }
                         }
+                        l = window.data.tasks;
+                        let d = cvf.descincludes;
+                        let t = cvf.titleincludes;
+                        let r = [];
+                        if (cvf.tagincludes.includes(',')){
+                          r = cvf.tagincludes.split(',').map(i => parseInt(i));
+                        }else{
+                            if (r.length > 0){
+                              r = parseInt(r);
+                            }
+                            else{
+                              r = '';
+                            }
+                          }
+                          
+                        
 
 
                         //// TASKS RENDERING ////
@@ -391,8 +407,36 @@ TO-DO list app
                           Here, we can do additional grouping according to the filter.
                         */
                         let tasks = window.data.tasks;
-                        console.log(cvf);
-                        console.log(tasks);
+                        for (let zxc = tasks.length - 1; zxc >= 0; zxc--){
+                          // Desc includes and title includes and tag includes
+                          if (d.length > 0){
+                            if (tasks[zxc].description.includes(d)){
+                              tasks.splice(zxc, 1);
+                            }
+                          }
+                          else if (t.length > 0){
+                            if (!tasks[zxc].taskname.includes(t)){
+                              tasks.splice(zxc, 1);
+                            }
+                          }
+                          else if (r.length > 0){
+                            let sat = false;
+                            if (!Object.hasOwn(tasks[zxc], 'tags')){
+                              sat = true;
+                            }
+                            else{
+                              let tasktg = tasks[zxc].tags.map(tag => tag.tagid);
+                              tasktg.forEach(v => {
+                                if (r.includes(v)){
+                                  sat = true;
+                                }
+                              });
+                            }
+                            if (!sat){
+                              tasks.splice(zxc, 1);
+                            }
+                          }
+                        }
                         let groups = {};
                         // Here we should put everything in this groups object for the
                         // render later.
@@ -517,6 +561,8 @@ TO-DO list app
                         tl.innerHTML = '';
                         let categories = Object.keys(groups);
                         categories.sort((a, b) => {
+                          if (typeof datefns == 'undefined')
+                            location.reload();
                           return datefns.compareDesc(b,a);
                         });
                         for (let zx = 0; zx < categories.length; zx++){
