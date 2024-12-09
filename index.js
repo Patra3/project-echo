@@ -754,6 +754,9 @@ let webApiListeners = {
     '/bundle.js' : (req, res) => {
         res.sendFile(path.resolve('public/bundle.js'));
     },
+    '/datefns.js' : (req, res) => {
+        res.sendFile(path.resolve('public/datefns.js'))
+    },
     '/favicon.ico' : (req, res) => {
         res.sendFile(path.resolve('favicon.ico'));
     },

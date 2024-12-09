@@ -40,18 +40,7 @@ TO-DO list app
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@0.24.0/dist/coloris.min.css"/>
     <script src="https://cdn.jsdelivr.net/gh/mdbassit/Coloris@0.24.0/dist/coloris.min.js"></script>
 
-    <script>
-      import('https://cdn.skypack.dev/date-fns').then(d => {
-        if (typeof d == 'undefined'){
-          location.reload();
-        }
-        window.datefns = d;
-      }).catch(e => {
-        // Unacceptable error, have to reload.
-        // Maybe it's down.
-        location.reload();
-      });
-    </script>
+    <script src="datefns.js"></script>
 
     <!-- marked -->
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
