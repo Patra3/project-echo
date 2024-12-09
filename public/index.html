@@ -24,8 +24,8 @@ TO-DO list app
     <!-- GOOGLE FONTS -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Parkinsans:wght@300..800&display=swap" rel="stylesheet">
-    
+    <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300;1,400;1,500&family=Nabla&family=Parkinsans:wght@300..800&display=swap" rel="stylesheet">
+
     <!-- BUFFER -->
     <script src="bundle.js"></script>
 
@@ -64,10 +64,10 @@ TO-DO list app
     
     <style>
 
-      hr {
-        border: none;
-        height: 10px;
+      #clock-statement {
+        font-family: 'DM Mono', monospace;
       }
+
 
       * {
         font-family: "Parkinsans", sans-serif;
@@ -195,11 +195,32 @@ TO-DO list app
         right: 35px;
         }
       }
+      .fade-in {
+        opacity: 1;
+        animation-name: fadeInOpacity;
+        animation-iteration-count: 1;
+        animation-timing-function: ease-in;
+        animation-duration: 5s;
+      }
+      @keyframes fadeInOpacity {
+        0% {
+          opacity: 0;
+        }
+        100% {
+          opacity: 1;
+        }
+      }
+      .tricon {
+        float: right;
+        cursor: pointer;
+        margin-left: 5px;
+        margin-right: 5px
+      }
     </style>
   </head>
   <body>
 
-    <div id="loading_overlay" class="overlay">
+    <div id="loading_overlay" class="overlay fade-in">
       <div class="overlay-content">
         <h3>Loading, please wait...</h3>
         <div class="container">
@@ -239,7 +260,7 @@ TO-DO list app
       <div id="main-page" class="page">
         <nav class="navbar fixed-bottom bg-body-tertiary">
           <div class="container-fluid">
-            <a class="navbar-brand navbar-right" href="#"><b>Project Echo</b>&nbsp;<i data-feather="check"></i></a>
+            <div onclick="changePage('tasks-view')" class="navbar-brand navbar-right" style="cursor:pointer;"><b>Project Echo</b>&nbsp;<i data-feather="check"></i></div>
             <button id="offcanvas-toggler" class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#navbar-offcanvas">
               <span class="navbar-toggler-icon"></span>
             </button>
@@ -294,6 +315,13 @@ TO-DO list app
                   Editing Filter 1
                 </div>
                 <script>
+                  
+                  /**
+                   * Short getElementById wrapper
+                   */
+                  function gebi(id){
+                    return document.getElementById(id);
+                  }
                   // Script for filter form dynamics.
                   // This is just here for ease of development.
 
@@ -426,7 +454,7 @@ TO-DO list app
                               date = new Date(task.createddate);
                             }
                             // get month
-                            let thisGroup = `Month ${date.getMonth()} of ${date.getFullYear()}`;
+                            let thisGroup = `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`;
                             if (!Object.hasOwn(groups, thisGroup)){
                               groups[thisGroup] = [];
                             }
@@ -488,7 +516,12 @@ TO-DO list app
                         // Now we can render the groups to the DOM.
                         let tl = gebi('tasks-list');
                         tl.innerHTML = '';
-                        for (let category in groups){
+                        let categories = Object.keys(groups);
+                        categories.sort((a, b) => {
+                          return datefns.compareDesc(b,a);
+                        });
+                        for (let zx = 0; zx < categories.length; zx++){
+                          let category = categories[zx];
                           let childHtmls = [];
                           for (let i = 0; i < groups[category].length; i++){
                             let task = groups[category][i];
@@ -512,43 +545,69 @@ TO-DO list app
                             let dfcolor = ''
                             let aa = '';
                             let bb = '';
+                            let callB = '';
 
                             if (task.completeddate == null){
                               datafeather = 'circle';
                               dfcolor = 'orange';
                               bb = 'hidden';
+                              callB = `markComplete(${task.taskid})`;
                             }
                             else{
                               datafeather = 'check';
                               dfcolor = 'green';
                               aa = 'hidden';
+                              callB = `markIncomplete(${task.taskid})`;
                             }
 
                             childHtmls.push(`
                               <br>
                               <div class="card">
                                 <div class="card-body">
-                                  <h6>${task.taskname}</h6>
-                                  <p><i data-feather="${datafeather}" style="color: ${dfcolor};"></i>&nbsp;${descm}</p>
-                                  <div id="task-sb${task.taskid}">${DOMPurify.sanitize(marked.parse(task.description))}</div>
-                                </div>
-                                <div class="card-footer">
-                                  <button onclick="markComplete(${task.taskid})" type="button" class="btn text-success" ${aa}>Mark as Complete</button>
-                                  <button onclick="markIncomplete(${task.taskid})" type="button" class="btn text-secondary" ${bb}>Mark incomplete</button>
-                                  <button onclick="editTask(${task.taskid})" type="button" class="btn text-primary">Edit Task</button>
-                                  <button onclick="deleteTask(${task.taskid})" type="button" class="btn text-danger">Delete Task</button>
-                                  <button onclick="dlAttachments(${task.attachmentid})" type="button" class="btn" ${task.attachmentid == null ? 'hidden' : ''}>Download attachment</button>
+                                  <div class="row">
+                                    <div class="col-6" style="font-family: 'DM Mono', monospace;">
+                                      <h6>${task.taskname}</h6>
+                                    </div>
+                                    <div class="col-6"><i style="color: darkred;" title="Delete" onclick="deleteTask(${task.taskid})" data-feather="trash" class="tricon"></i><i style="color: green;" onclick="dlAttachments(${task.attachmentid})" data-feather="download" class="tricon" ${task.attachmentid == null ? 'hidden' : ''}></i><i onclick="editTask(${task.taskid})" data-feather="edit" class="tricon"></i></div>
+                                  </div>
+                                  <p style="font-size: 0.90rem; font-family: 'DM Mono', monospace;"><i onclick="${callB}" data-feather="${datafeather}" style="color: ${dfcolor};cursor:pointer;"></i>&nbsp;${descm}</p>
+                                  <div class="task-itm-desc container" id="task-sb${task.taskid}" style="width: 100%;">${DOMPurify.sanitize(marked.parse(task.description))}</div>
                                 </div>
                               </div>
                             `);
                           }
+                          let oldCategory = category;
+                          if (category.includes('/') && !category.includes('-')){
+                            category = datefns.intlFormatDistance(
+                              category,
+                              new Date()
+                            , {unit: 'day'});
+                            category += ' (' + oldCategory + ')'
+                            category = category[0].toUpperCase() + category.substring(1);
+                          }
                           let allTogether = childHtmls.join('');
-                          let categoryDom = `<br><hr><br>
-                            <h5 style="background-color: black; color: white; padding: 10px; border-radius: 10px;">${category}</h5>
-                            <div class="container">${allTogether}</div>
+                          let categoryDom = `
+                            <h5 style="color: black; padding: 10px; border-radius: 10px; font-family: 'DM Mono', monospace;">${category}</h5>
+                            <hr>
+                            <div class="container">${allTogether}</div><br><br><br>
                           `;
-                          tl.innerHTML += categoryDom;
+                          tl.innerHTML += '<br><br>' + categoryDom;
                           feather.replace();
+                          let listElems = document.getElementsByClassName('task-itm-desc');
+                          for (let i = 0; i < listElems.length; i++){
+                            let elemd = listElems[i];
+                            let grandchildren = elemd.getElementsByTagName('*');
+                            for (let j = 0; j < grandchildren.length; j++){
+                              let target = grandchildren[j];
+                              if (target.tagName == 'IMG'){
+                                target.style = 'width: 100%; border-radius: 5px; cursor: pointer;';
+                                target.onclick = () => {
+                                  let url = target.getAttribute('src');
+                                  window.open(url, '_blank');
+                                }
+                              }
+                            }
+                          }
                         }
 
                       }
@@ -587,12 +646,14 @@ TO-DO list app
                   }
 
                   function editTask(taskid){
+                    pauseScan = true;
                     let m = gebi('taskEditorOffcanvas');
                     let b = new bootstrap.Offcanvas(m);
                     let taskname = gebi('task-name');
                     let duedate = gebi('task-duedate');
                     let taskprio = gebi('task-priority');
                     gebi('task-attachments').value = '';
+                    gebi('task-editor-btn').innerHTML = 'Edit Task';
                     m.setAttribute('data-idd', taskid);
                     // Set the values to what the task is.
                     window.data.tasks.forEach(task => {
@@ -638,9 +699,50 @@ TO-DO list app
                         gebi('task-attachments').value = '';
                         taskprio.value = 1;
                       });
+                      pauseScan = false;
                     }, {once: true});
                     b.toggle();
                   }
+
+                  let state = false;
+
+                  window.addEventListener('load', function () {
+                    window.pauseScan = false;
+                    gebi('taskEditorOffcanvas').addEventListener('show.bs.offcanvas', () => {
+                      state = true;
+                      pauseScan = true;
+                    });
+                    gebi('taskEditorOffcanvas').addEventListener('hide.bs.offcanvas', () => {
+                      state = false;
+                      pauseScan = false;
+                    });
+                    window.setInterval(() => {
+                      if (!pauseScan){
+                        let m = gebi('taskEditorOffcanvas');
+                        let b = new bootstrap.Offcanvas(m);
+                        if (!state){
+                          if (m.hasAttribute('data-idd')){
+                            m.removeAttribute('data-idd');
+                          }
+                          gebi('task-editor-btn').innerHTML = 'Create Task';
+                          let taskname = gebi('task-name');
+                          let duedate = gebi('task-duedate');
+                          let taskprio = gebi('task-priority');
+                          window.currentGroup.tags.forEach(tag => {
+                            let g = gebi(`task-tag-number${tag.tagid}`);
+                            if (g != null){
+                              g.checked = false;
+                            }
+                          });
+                          taskname.value = '';
+                          taskDescription.value('');
+                          duedate.value = null;
+                          gebi('task-attachments').value = '';
+                          taskprio.value = 1;
+                        }
+                      }
+                    }, 1000);
+                  });
 
                   function deleteTask(taskid){
                     if (confirm('Are you certain you wish to delete this task?')){
@@ -1024,7 +1126,9 @@ TO-DO list app
               <h4>Task View</h4>
               <p id="clock-statement">Clock: 8:13pm</p>
               <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskEditorOffcanvas"><i data-feather="plus-circle"></i> &nbsp;New Task</button>
-              <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Apply Filter</button>
+              <button onclick="changePage('tags-view')" class="btn" type="button" style="background-color: purple; color: white;"><i data-feather="tag"></i>&nbsp; Create Tag</button>
+              <button onclick="changePage('filters-view')" class="btn btn-success" type="button"><i data-feather="layout"></i>&nbsp; Create Filter</button>
+              <button style="margin-top: 5px;" id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Apply Filter</button>
               
               <br><br>
               <div id="tasks-list">
@@ -1061,7 +1165,13 @@ TO-DO list app
                     </div>
                     <div class="mb-3">
                       <label class="form-label" for="task-priority">Task Priority</label>
-                      <input type="number" max="5" min="1" step="1" value="1" class="form-control" id="task-priority" name="task-priority" required>
+                      <select name="task-priority" class="form-control" id="task-priority">
+                        <option value="1">Lowest</option>
+                        <option value="2">Low</option>
+                        <option value="3">Medium</option>
+                        <option value="4">High</option>
+                        <option value="5">Highest</option>
+                      </select>
                     </div>
                     <div class="mb-3">
                       <label class="form-label" for="task-attachments">Add Attachments</label>
@@ -1193,7 +1303,8 @@ TO-DO list app
               <br><br><br>
               <button onclick="uploadPfp()" type="button" class="btn btn-outline-primary w-100">Change profile picture</button><br><br>
               <button data-bs-toggle="offcanvas" data-bs-target="#password-ofc" type="button" class="btn btn-outline-secondary w-100">Change password</button><br><br>
-              <button onclick="changeUsername()" type="button" class="btn btn-outline-warning w-100">Change username</button>
+              <button onclick="changeUsername()" type="button" class="btn btn-outline-warning w-100">Change username</button><br><br><br>
+              <button id="shareCodeButton" type="button" class="btn btn-outline-dark w-100">Copy user code</button>
               <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="password-ofc">
                 <div class="offcanvas-header">
                   <h5 class="offcanvas-title">Change Password</h5>
@@ -1873,6 +1984,13 @@ TO-DO list app
             let ababa = gebi('people-list');
             ababa.innerHTML = htmlList;
             // Set greeting.
+            let btt = gebi('profile-view-item');
+            btt.addEventListener('mouseover', () => {
+              gebi('greeting').innerHTML = `My Profile`;
+            });
+            btt.addEventListener('mouseout', () => {
+              gebi('greeting').innerHTML = `Hi, ${data.me.username}`;
+            });
             gebi('greeting').innerHTML = `Hi, ${data.me.username}`;
             // Set vaults entries
             let vaultDom = gebi('vaults');
@@ -1892,8 +2010,8 @@ TO-DO list app
               baseCard.innerHTML = `<br>
                   <div class="card">
                     <div class="card-body" data-groupid="${group.groupid}">
-                      <h5 class="card-title">${group.groupname}&nbsp;<span style="float:right;border:2px solid;padding:5px;border-radius:25px;font-size:12px;" ${group.adminid == window.data.me.userid ? '' : 'hidden'}>Your vault</span>&nbsp;<span style="margin-left:5px;margin-right:5px;float:right;background-color:lightgreen;padding:5px;border-radius:25px;font-size:12px;" ${currentVaultId === group.groupid ? '' : 'hidden'}>Viewing</span></h5>
-                      <small>
+                      <h5 class="card-title">${group.groupname}&nbsp;<span style="float:right;border:2px solid;padding:3px;border-radius:25px;font-size:12px;" ${group.adminid == window.data.me.userid ? '' : 'hidden'}>Your vault</span>&nbsp;<span style="margin-left:5px;margin-right:5px;float:right;background-color:lightgreen;padding:5px;border-radius:25px;font-size:12px;" ${currentVaultId === group.groupid ? '' : 'hidden'}>Viewing</span></h5>
+                      <small style="font-family: 'DM Mono', monospace;">
                       <i data-feather="users" style="width: 1rem;"></i> ${group.users.length} ${group.users.length == 1 ? 'person' : 'people'}
                       &nbsp;
                       <i data-feather="check-circle" style="width: 1rem;"></i> ${incomplete} tasks
@@ -1927,9 +2045,7 @@ TO-DO list app
             else{
               window.currentTags.forEach(tag => {
                 let dom = document.createElement('div');
-                dom.innerHTML = `
-                  <button onclick="renderTagEditor(this.dataset.tagid)" data-tagid="${tag.tagid}" type="button" class="btn w-100" style="border-radius:0;background-color: ${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</button>
-                `;
+                dom.innerHTML = `<button onclick="renderTagEditor(this.dataset.tagid)" data-tagid="${tag.tagid}" type="button" class="btn w-100" style="border-radius:0;background-color: ${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</button>`;
                 taskEditorList.appendChild(dom);
                 
                 // now create the selectors for new task
@@ -1975,6 +2091,10 @@ TO-DO list app
            gebi('inviteCode').innerHTML = `${window.data.me.userid}`
            gebi('inviteCode').onclick = () => {
             navigator.clipboard.writeText(window.data.me.userid);
+           }
+           gebi('shareCodeButton').onclick = () => {
+            navigator.clipboard.writeText(window.data.me.userid);
+            alert('User code copied to your clipboard. Only share with trusted people.');
            }
 
           }
@@ -2049,13 +2169,6 @@ TO-DO list app
           console.error(`Error while handling route ${request}`);
           console.error(e.message);
         }
-      }
-
-      /**
-       * Short getElementById wrapper
-       */
-      function gebi(id){
-        return document.getElementById(id);
       }
 
       /**

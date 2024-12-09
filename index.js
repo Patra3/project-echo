@@ -797,7 +797,7 @@ let webApiListeners = {
                     if (attemptedHash === realpwd){
                         // Let's generate a user session token and hand it to them.
                         const sessionToken = nanoid();
-                        const exp = Date.now() + 3.6e+6;
+                        const exp = Date.now() + 1.577e+10;
                         await sql`
                         INSERT INTO UserSessionToken(Token, IssuedDate, ExpireDate, UserID) VALUES
                         (${sessionToken}, ${Date.now()}, ${exp}, ${d[0].userid});
@@ -1696,6 +1696,7 @@ httpServer.listen(port, async () => {
     await cleanAttachments();
     await client.connect();
     c.success(` HTTP mode enabled on port ${port}.`);
+    c.success(` View here: http://localhost:${port}`);
     if (httpsMode){
         let key = fs.readFileSync(path.resolve(d.key));
         let cert = fs.readFileSync(path.resolve(d.cert));
