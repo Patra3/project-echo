@@ -368,8 +368,8 @@ TO-DO list app
                           }
                         }
                         l = window.data.tasks;
-                        let d = cvf.descincludes;
-                        let t = cvf.titleincludes;
+                        let d = cvf.descincludes == null ? '' : cvf.descincludes;
+                        let t = cvf.titleincludes == null ? '' : cvf.titleincludes;
                         let r = [];
                         if (cvf.tagincludes.includes(',')){
                           r = cvf.tagincludes.split(',').map(i => parseInt(i));
@@ -1726,7 +1726,11 @@ TO-DO list app
               }
             });
             if (isEdit){
-              request(['updateTask', sessionToken, taskName, new Date(dueDate).toString(), taskPrio, isEditId], true, {
+              let dd = new Date(dueDate).toString();
+              if (dueDate == null){
+                dd = null;
+              }
+              request(['updateTask', sessionToken, taskName, dd, taskPrio, isEditId], true, {
                 tags: taskTags,
                 attachments: fileData,
                 desc: taskDesc,
@@ -1743,7 +1747,11 @@ TO-DO list app
               });
             }
             else{
-              request(['createNewTask', sessionToken, taskName, new Date(dueDate).toString(), taskPrio], true, {
+              let dd = new Date(dueDate).toString();
+              if (dueDate == null){
+                dd = null;
+              }
+              request(['createNewTask', sessionToken, taskName, dd, taskPrio], true, {
                 tags: taskTags,
                 attachments: fileData,
                 desc: taskDesc,
