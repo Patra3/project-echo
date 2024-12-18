@@ -19,7 +19,7 @@ import http from 'http';
 // Host our web app and define our APIs
 const app = express();
 app.use(express.json({limit: '1gb'})); // Set max attachment file size here.
-const port = 80;
+const port = 8080;
 
 // Connect secondary connection to SQL.
 const {Client} = pg;

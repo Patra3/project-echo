@@ -161,7 +161,7 @@ function updateTasksWithView() {
             date = new Date(task.createddate);
           }
           // get week
-          let thisGroup = `${new Date(datefns.startOfWeek(date)).toLocaleDateString()} - ${new Date(datefns.endOfWeek(date)).toLocaleDateString()}`;
+          let thisGroup = `${new Date(startOfWeek(date)).toLocaleDateString()} - ${new Date(endOfWeek(date)).toLocaleDateString()}`;
           if (!Object.hasOwn(groups, thisGroup)) {
             groups[thisGroup] = [];
           }
@@ -244,9 +244,7 @@ function updateTasksWithView() {
       tl.innerHTML = '';
       let categories = Object.keys(groups);
       categories.sort((a, b) => {
-        if (typeof datefns == 'undefined')
-          location.reload();
-        return datefns.compareDesc(b, a);
+        return compareDesc(b, a);
       });
       for (let zx = 0; zx < categories.length; zx++) {
         let category = categories[zx];
@@ -258,7 +256,7 @@ function updateTasksWithView() {
           if (task.duedate != null && task.duedate != '') {
             try {
               descn = new Date(task.duedate).toLocaleString();
-              descm += 'Due ' + datefns.intlFormatDistance(
+              descm += 'Due ' + intlFormatDistance(
                 new Date(task.duedate),
                 new Date()
               );
@@ -319,7 +317,7 @@ function updateTasksWithView() {
         }
         let oldCategory = category;
         if (category.includes('/') && !category.includes('-')) {
-          category = datefns.intlFormatDistance(
+          category = intlFormatDistance(
             category,
             new Date()
             , { unit: 'day' });
