@@ -103,6 +103,15 @@ TO-DO list app
         background-color: black;
         color: white;
       }
+
+      .task-mini-tag {
+        font-family: 'DM Mono', monospace;
+        font-size: 0.7em;
+        border: 2px solid;
+        border-radius: 15px;
+        padding: 5px;
+        cursor: default;
+      }
       .checkbox-round {
         width: 1.3em;
         height: 1.3em;
@@ -373,14 +382,15 @@ TO-DO list app
                         let r = [];
                         if (cvf.tagincludes.includes(',')){
                           r = cvf.tagincludes.split(',').map(i => parseInt(i));
-                        }else{
-                            if (r.length > 0){
-                              r = parseInt(r);
-                            }
-                            else{
-                              r = '';
-                            }
+                        }
+                        else{
+                          if (cvf.tagincludes.length > 0){
+                            r = parseInt(cvf.tagincludes) + '';
                           }
+                          else{
+                            r = '';
+                          }
+                        }
                           
                         
 
@@ -392,6 +402,7 @@ TO-DO list app
                           'cvf', which should already have sorted it in SQL prior.
                           Here, we can do additional grouping according to the filter.
                         */
+                       console.log('ARGGG: ' + r);
                         let tasks = window.data.tasks;
                         for (let zxc = tasks.length - 1; zxc >= 0; zxc--){
                           // Desc includes and title includes and tag includes
@@ -554,8 +565,10 @@ TO-DO list app
                           for (let i = 0; i < groups[category].length; i++){
                             let task = groups[category][i];
                             let descm = '';
+                            let descn = '';
                             if (task.duedate != null && task.duedate != ''){
                               try {
+                                descn = new Date(task.duedate).toLocaleString();
                                 descm += 'Due ' + datefns.intlFormatDistance(
                                   new Date(task.duedate),
                                   new Date()
@@ -588,17 +601,28 @@ TO-DO list app
                               callB = `markIncomplete(${task.taskid})`;
                             }
 
+                            let tagElems = '';
+                            if (Object.hasOwn(task, 'tags')){
+                              task.tags.forEach(tag => {
+                                tagElems += `
+                                  <span class="task-mini-tag" style="${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}background-color: ${tag.tagcolor};border-color: ${darkenHexColor(tag.tagcolor, 50)};">#${tag.tagname}</span>
+                                `;
+                              });
+                            }
+
                             childHtmls.push(`
                               <br>
                               <div class="card">
                                 <div class="card-body">
-                                  <div class="row">
+                                  ${tagElems}
+                                  <div class="row" style="${Object.hasOwn(task, 'tags') && task.tags.length > 0 ? 'margin-top: 20px;' : ''} margin-bottom: 5px;">
                                     <div class="col-6" style="font-family: 'DM Mono', monospace;">
-                                      <h6>${task.taskname}</h6>
+                                      <h5 style="padding:0;margin:0;"><i onclick="${callB}" data-feather="${datafeather}" style="color: ${dfcolor};cursor:pointer;"></i>&nbsp;&nbsp;&nbsp;${task.taskname}</h5>
                                     </div>
                                     <div class="col-6"><i style="color: darkred;" title="Delete" onclick="deleteTask(${task.taskid})" data-feather="trash" class="tricon"></i><i style="color: green;" onclick="dlAttachments(${task.attachmentid})" data-feather="download" class="tricon" ${task.attachmentid == null ? 'hidden' : ''}></i><i onclick="editTask(${task.taskid})" data-feather="edit" class="tricon"></i></div>
                                   </div>
-                                  <p style="font-size: 0.90rem; font-family: 'DM Mono', monospace;"><i onclick="${callB}" data-feather="${datafeather}" style="color: ${dfcolor};cursor:pointer;"></i>&nbsp;${descm}</p>
+                                  <span style="font-size: 0.91rem; font-family: 'DM Mono', monospace;">${descn}</span>
+                                  <p style="font-size: 0.80rem; font-family: 'DM Mono', monospace;${descm.includes('ago') ? 'color: darkred;' : ''}">${descm}</p>
                                   <div class="task-itm-desc container" id="task-sb${task.taskid}" style="width: 100%;">${DOMPurify.sanitize(marked.parse(task.description))}</div>
                                 </div>
                               </div>
@@ -688,8 +712,11 @@ TO-DO list app
                       if (task.taskid == taskid){
                         taskname.value = task.taskname;
                         taskDescription.value(task.description);
-                        if (task.duedate != null)
-                          duedate.value = new Date(task.duedate).toISOString().slice(0, 16);
+                        if (task.duedate != null){
+                          let fsd = new Date(task.duedate);
+                          fsd.setMinutes(fsd.getMinutes() - fsd.getTimezoneOffset());
+                          duedate.value = fsd.toISOString().slice(0, 16);
+                        }
                         else
                           duedate.value = null;
 
@@ -1098,7 +1125,7 @@ TO-DO list app
                     </div>
                     <!-- dynamic -->
                     <div class="mb-3">
-                      <label class="form-label" for="tda3">Exclude Tags</label>
+                      <label class="form-label" for="tda3">Include Tags</label>
                       <div class="form-control" id="tda3">
                         <div class="row row-col-7" id="filter-tags"></div>
                       </div>
@@ -1471,6 +1498,24 @@ TO-DO list app
 
     <script>
 
+      function darkenHexColor(hex, amount = 20) {
+          // Remove the '#' if it exists
+          hex = hex.replace('#', '');
+
+          // Parse the hex color into its RGB components
+          let r = parseInt(hex.substring(0, 2), 16);
+          let g = parseInt(hex.substring(2, 4), 16);
+          let b = parseInt(hex.substring(4, 6), 16);
+
+          // Decrease each color component by the amount, clamping to 0
+          r = Math.max(r - amount, 0);
+          g = Math.max(g - amount, 0);
+          b = Math.max(b - amount, 0);
+
+          // Convert back to a hex string and return
+          return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+      }
+
       
       let storage = {
         write: (key, value) => {
@@ -1519,11 +1564,18 @@ TO-DO list app
 
       feather.replace();
 
+      // Global clock renderer.
       window.setInterval(() => {
+        let f = new Date();
         let p = gebi('clock-statement');
         if (window.data){
           p.innerHTML = 
-          `${new Date().toLocaleString()} (${window.data.tasks.length} tasks)`;
+          `${f.toLocaleString()} (${window.data.tasks.length} tasks)`;
+        }
+
+        // Also global tasks update here.
+        if (f.getSeconds() == 0){
+          updateTasksWithView();
         }
       }, 1000);
 
@@ -1726,7 +1778,7 @@ TO-DO list app
               }
             });
             if (isEdit){
-              let dd = new Date(dueDate).toString();
+              let dd = new Date(dueDate).toISOString();
               if (dueDate == null){
                 dd = null;
               }
@@ -1737,17 +1789,18 @@ TO-DO list app
                 groupid: window.currentGroup.groupid
               }).then(data => {
                 if (data.status == 'OK'){
+                  console.log(taskTags);
                   location.reload();
                 }
                 else{
                   alert('An error has occurred while creating this task.');
                   console.log(window.data);
-                  //location.reload();
+                  location.reload();
                 }
               });
             }
             else{
-              let dd = new Date(dueDate).toString();
+              let dd = new Date(dueDate).toISOString();
               if (dueDate == null){
                 dd = null;
               }

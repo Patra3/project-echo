@@ -1367,6 +1367,24 @@ let webApiListeners = {
                                 `
                             }
                         }
+                        // Check and remove tags if we need to.
+                        const testTags = await sql`
+                            SELECT TagID, TaskID FROM TagsTables
+                            WHERE TaskID = ${taskid};
+                        `;
+                        if (testTags.length > tags.length){
+                            let t1 = testTags.map(i => i.tagid);
+                            for (let z0 = 0; z0 < t1.length; z0++){
+                                let tagidd = t1[z0];
+                                if (!tags.includes(tagidd)){
+                                    // Remove.
+                                    await sql`
+                                    DELETE FROM TagsTables
+                                    WHERE TaskID = ${taskid} AND TagID = ${tagidd};
+                                    `;
+                                }
+                            }
+                        }
                         res.send(str({
                             status: 'OK'
                         }));
