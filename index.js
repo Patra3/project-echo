@@ -5,7 +5,7 @@ import express from 'express';
 import path from 'path';
 import chalk from 'chalk';
 import sql from './db.js';
-import crypto, { createCipheriv } from 'crypto';
+import crypto from 'crypto';
 import util from 'util';
 import {nanoid} from 'nanoid';
 import fs from 'fs';
@@ -749,13 +749,13 @@ async function deleteAttachment(attachmentid){
 // Format: route: (req, res) => ()
 let webApiListeners = {
     '/' : (req, res) => {
-        res.sendFile(path.resolve('public/index.html'));
+        res.sendFile(path.resolve('public/index_min.html'));
     },
     '/bundle.js' : (req, res) => {
         res.sendFile(path.resolve('public/bundle.js'));
     },
-    '/datefns.js' : (req, res) => {
-        res.sendFile(path.resolve('public/datefns.js'))
+    '/main.js' : (req, res) => {
+        res.sendFile(path.resolve('public/main_ob.js'))
     },
     '/favicon.ico' : (req, res) => {
         res.sendFile(path.resolve('favicon.ico'));
