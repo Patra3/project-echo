@@ -50,8 +50,12 @@ TO-DO list app
       #clock-statement {
         font-family: 'DM Mono', monospace;
       }
-
-
+      .center {
+        display: block;
+        margin-left: auto;
+        margin-right: auto;
+        width: 50%;
+      }
       * {
         font-family: "Parkinsans", sans-serif;
       }
@@ -108,6 +112,7 @@ TO-DO list app
         border-radius: 15px;
         padding: 5px;
         cursor: default;
+        user-select: none;
       }
       .checkbox-round {
         width: 1.3em;
@@ -250,50 +255,24 @@ TO-DO list app
 
       </div>
       <div id="main-page" class="page">
-        <nav class="navbar fixed-bottom bg-body-tertiary">
+        <nav class="navbar fixed-bottom" style="background-color: white;">
           <div class="container-fluid">
             <div onclick="changePage('tasks-view')" class="navbar-brand navbar-right" style="cursor:pointer;"><b>Project Echo</b>&nbsp;<i data-feather="check"></i></div>
-            <button id="offcanvas-toggler" class="navbar-toggler" type="button" data-bs-toggle="offcanvas" data-bs-target="#navbar-offcanvas">
-              <span class="navbar-toggler-icon"></span>
-            </button>
-            <!-- main menu offcanvas -->
-            <div class="offcanvas offcanvas-end" tabindex="-1" id="navbar-offcanvas">
-              <div class="offcanvas-header">
-                <h5 onclick="changePage('profile-view')" data-bs-dismiss="offcanvas" id="profile-view-item" class="offcanvas-title" data-bs-dismiss="offcanvas"><img class="self-pfp" style="width:3rem;border-radius:50%;">&nbsp; <span id="greeting">test</span></h5>
-                <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
-              </div>
-              <div class="offcanvas-body">
-                <ul class="nav nav-pills flex-column">
-                  <li class="nav-item">
-                    <a data-bs-dismiss="offcanvas" id="tasks-view-item" class="nav-link active" aria-current="page" onclick="changePage('tasks-view')">Tasks</a>
-                  </li>
-                  <li class="nav-item">
-                    <a data-bs-dismiss="offcanvas" id="filters-view-item" class="nav-link" aria-current="page" onclick="changePage('filters-view')">Filters</a>
-                  </li>
-                  <li class="nav-item">
-                    <a data-bs-dismiss="offcanvas" id="vaults-view-item" class="nav-link" onclick="changePage('vaults-view')">Vaults</a>
-                  </li>
-                  <li class="nav-item">
-                    <a data-bs-dismiss="offcanvas" id="tags-view-item" class="nav-link" onclick="changePage('tags-view')">Tags</a>
-                  </li>
-                  <li class="nav-item">
-                    <a data-bs-dismiss="offcanvas" id="people-view-item" class="nav-link" onclick="changePage('people-view')">People</a>
-                  </li>
-                  <li class="nav-item" id="logoutButton">
-                    <a class="nav-link" style="color: lightcoral;" onclick="storage.delete('sessionToken');location.reload();">Log Out</a>
-                  </li>
-                </ul>
-              </div>
-            </div>
+            <button class="navbar-toggler" onclick="changePage('tasks-view')" type="button" style="border:0;outline:none;box-shadow:none;"><i data-feather="home"></i></button>
           </div>
         </nav>
+        <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="guide-offcanvas">
+          <div class="offcanvas-header">
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+          </div>
+          <div class="offcanvas-body" id="guide-body"></div>
+        </div>
         <br>
         <div class="container">
           <div>
             <div id="filters-view" class="views">
               <h4>Filter Editor</h4>
               <p>Here you can add, edit and delete filters which will filter out tasks from your view depending on how you define it.</p>
-              
               <br>
               <div class="dropdown">
                 <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
@@ -315,7 +294,7 @@ TO-DO list app
                     <div class="mb-3">
                       <label class="form-label" for="tda3">Include Tags</label>
                       <div class="form-control" id="tda3">
-                        <div class="row row-col-7" id="filter-tags"></div>
+                        <div id="filter-tags" style="display: flex; flex-wrap: wrap;"></div>
                       </div>
                     </div>
                     <div class="mb-3">
@@ -366,13 +345,23 @@ TO-DO list app
               <br><br><br><br>
             </div>
             <div id="tasks-view">
-              <h4>Task View</h4>
-              <p id="clock-statement">Clock: 8:13pm</p>
-              <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskEditorOffcanvas"><i data-feather="plus-circle"></i> &nbsp;New Task</button>
-              <button onclick="changePage('tags-view')" class="btn" type="button" style="background-color: purple; color: white;"><i data-feather="tag"></i>&nbsp; Create Tag</button>
-              <button onclick="changePage('filters-view')" class="btn btn-success" type="button"><i data-feather="layout"></i>&nbsp; Create Filter</button>
-              <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Apply Filter</button>
-              
+              <div class="row">
+                <div class="col-11">
+                  <h4>My Tasks</h4>
+                  <p id="clock-statement">Clock: 8:13pm</p>
+                </div>
+                <div class="col-1">
+                  <img class="self-pfp" style="width:2.4rem;border-radius:50%;float:right;cursor:pointer;" onclick="changePage('profile-view')">
+                </div>
+              </div>
+              <div style="display: flex; flex-wrap: wrap; gap: 5px;">
+                <button class="btn btn-primary" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskEditorOffcanvas"><i data-feather="plus-circle"></i> &nbsp;New Task</button>
+                <button onclick="changePage('tags-view')" class="btn" type="button" style="background-color: purple; color: white;"><i data-feather="tag"></i>&nbsp; Create Tag</button>
+                <button onclick="changePage('filters-view')" class="btn btn-success" type="button"><i data-feather="layout"></i>&nbsp; Create Filter</button>
+                <button onclick="changePage('vaults-view')" class="btn" type="button" style="background-color: darkcyan; color: white"><i data-feather="box"></i>&nbsp; View Vaults</button>
+                <button id="viewSettingsBtn" class="btn btn-white" type="button" data-bs-toggle="offcanvas" data-bs-target="#taskSettingsOffcanvas"><i data-feather="settings"></i> &nbsp;Apply Filter</button>  
+                <button data-bs-toggle="offcanvas" data-bs-target="#guide-offcanvas" class="btn" type="button" style="background-color: lightgreen; color: black;"><i data-feather="help-circle"></i>&nbsp; Help Guide</button>
+              </div>
               <br><br>
               <div id="tasks-list">
                 
@@ -403,7 +392,7 @@ TO-DO list app
                     <div class="mb-3">
                       <label class="form-label" for="tda2">Task Tags</label>
                       <div class="form-control" id="tda2">
-                        <div class="row row-col-7" id="task-tags"></div>
+                        <div id="task-tags" style="display: flex; flex-wrap: wrap; "></div>
                       </div>
                     </div>
                     <div class="mb-3">
@@ -452,7 +441,7 @@ TO-DO list app
             <div id="vaults-view" class="views">
               <h4>Vaults</h4>
               <p>Each vault contains separate tasks and tags. You can share vaults with others.</p>
-              <button onclick="createNewGroup()" type="button" class="btn w-100 btn-primary">Create new vault</button>
+              <button onclick="createNewGroup()" type="button" class="btn btn-primary">Create new vault</button>
               <br><br><br>
               <div id="vaults">
                 <div class="card">
@@ -500,7 +489,7 @@ TO-DO list app
               </p>
               <br>
               <!-- dynamic insert -->
-              <div id="tag-editor-list"></div><br><br>
+              <div id="tag-editor-list" style="flex-wrap: wrap;"></div><br><br>
               <div class="card">
                 <div class="card-header">
                   Add new tag
@@ -523,7 +512,7 @@ TO-DO list app
               <br><br><br><br>
             </div>
             <div id="people-view" class="views">
-              <h4>People</h4>
+              <h4>Members</h4>
               <p id="people_desc">Here are the people who have access to this vault.</p>
               <button id="adduserbutton" onclick="createNewUser()" type="button" class="btn btn-outline-warning w-100"><b>ADMIN</b>: Create new user</button>
               <br><br>
@@ -536,18 +525,19 @@ TO-DO list app
             <div id="profile-view" class="views">
               <div class="row">
                 <div class="col-10">
-                  <h5 style="padding: 0; margin: 0;">My Profile</h5>
+                  <h4 style="padding: 0; margin: 0;">My Profile</h4>
                   <span style="font-size: 12px;" id="inviteCode"></span>
                 </div>
                 <div class="col-2">
-                  <img class="self-pfp" style="float: right; height: 2rem; border-radius: 50px;">
+                  <img class="self-pfp" style="float: right; width:2.4em; border-radius: 50px;">
                 </div>
               </div>
               <br><br><br>
-              <button onclick="uploadPfp()" type="button" class="btn btn-outline-primary w-100">Change profile picture</button><br><br>
-              <button data-bs-toggle="offcanvas" data-bs-target="#password-ofc" type="button" class="btn btn-outline-secondary w-100">Change password</button><br><br>
-              <button onclick="changeUsername()" type="button" class="btn btn-outline-warning w-100">Change username</button><br><br><br>
-              <button id="shareCodeButton" type="button" class="btn btn-outline-dark w-100">Copy user code</button>
+              <button onclick="uploadPfp()" type="button" class="btn btn-primary w-100">Change profile picture</button><br><br>
+              <button data-bs-toggle="offcanvas" data-bs-target="#password-ofc" type="button" class="btn btn-secondary w-100">Change password</button><br><br>
+              <button onclick="changeUsername()" type="button" class="btn btn-warning w-100">Change username</button><br><br><br>
+              <button id="shareCodeButton" type="button" class="btn btn-dark w-100">Copy user code</button><br><br>
+              <button onclick="storage.delete('sessionToken');location.reload();" class="btn btn-danger w-100" type="button">Log out</button>
               <div class="offcanvas offcanvas-bottom h-auto" tabindex="-1" id="password-ofc">
                 <div class="offcanvas-header">
                   <h5 class="offcanvas-title">Change Password</h5>

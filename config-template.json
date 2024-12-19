@@ -5,6 +5,7 @@
   "port" : "5432",
   "database" : "sampledb",
   "https" : false,
+  "devmode" : true,
   "key" : "",
   "cert" : ""
 }

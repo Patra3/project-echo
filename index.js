@@ -19,7 +19,9 @@ import http from 'http';
 // Host our web app and define our APIs
 const app = express();
 app.use(express.json({limit: '1gb'})); // Set max attachment file size here.
-const port = 80;
+
+let devMode = d['devmode'];
+const port = devMode ? 8080 : 80;
 
 // Connect secondary connection to SQL.
 const {Client} = pg;
@@ -503,7 +505,7 @@ async function dbCheck(){
 }
 
 async function cleanAttachments(){
-    c.runBigProcess('\n Cleaning attachments folder...');
+    c.runBigProcess('\n Cleaning attachments folder... ');
     let corrections = 0;
     let checked = 0;
     
@@ -541,7 +543,7 @@ async function cleanAttachments(){
             }
         }
     }
-    c.successText(` * ${checked} items checked, ${corrections} corrections made.\n\n`);
+    c.notice(`${checked} items checked, ${corrections} corrections made.\n\n`);
 }
 
 /**
@@ -745,16 +747,26 @@ async function deleteAttachment(attachmentid){
     }
 }
 
+app.use('/guide', express.static('guide'));
+
 ///// WEB APIs /////
 // Format: route: (req, res) => ()
 let webApiListeners = {
     '/' : (req, res) => {
+        if (devMode){
+            res.sendFile(path.resolve('public/index.html'));
+            return;
+        }
         res.sendFile(path.resolve('public/index_min.html'));
     },
     '/bundle.js' : (req, res) => {
         res.sendFile(path.resolve('public/bundle.js'));
     },
     '/main.js' : (req, res) => {
+        if (devMode){
+            res.sendFile(path.resolve('public/main.js'));
+            return;
+        }
         res.sendFile(path.resolve('public/main_ob.js'))
     },
     '/favicon.ico' : (req, res) => {
@@ -1716,8 +1728,13 @@ await dbCheck();
 httpServer.listen(port, async () => {
     await cleanAttachments();
     await client.connect();
-    c.success(` HTTP mode enabled on port ${port}.`);
-    c.success(` View here: http://localhost:${port}`);
+
+    
+    if (devMode){
+        c.inverse('\n   ** Dev mode enabled **   ');
+    }
+    c.success(` HTTP mode enabled on port ${port}. `);
+    c.success(` Local: ` + chalk.bold(`http://localhost:${port} `));
     if (httpsMode){
         let key = fs.readFileSync(path.resolve(d.key));
         let cert = fs.readFileSync(path.resolve(d.cert));

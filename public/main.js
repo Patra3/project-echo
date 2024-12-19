@@ -301,7 +301,7 @@ function updateTasksWithView() {
                               <br>
                               <div class="card">
                                 <div class="card-body">
-                                  ${tagElems}
+                                  <div style="display: flex; flex-wrap: wrap; row-gap: 5px; column-gap: 5px;">${tagElems}</div>
                                   <div class="row" style="${Object.hasOwn(task, 'tags') && task.tags.length > 0 ? 'margin-top: 20px;' : ''} margin-bottom: 5px;">
                                     <div class="col-6" style="font-family: 'DM Mono', monospace;">
                                       <h5 style="padding:0;margin:0;"><i onclick="${callB}" data-feather="${datafeather}" style="color: ${dfcolor};cursor:pointer;"></i>&nbsp;&nbsp;&nbsp;${task.taskname}</h5>
@@ -309,7 +309,7 @@ function updateTasksWithView() {
                                     <div class="col-6"><i style="color: darkred;" title="Delete" onclick="deleteTask(${task.taskid})" data-feather="trash" class="tricon"></i><i style="color: green;" onclick="dlAttachments(${task.attachmentid})" data-feather="download" class="tricon" ${task.attachmentid == null ? 'hidden' : ''}></i><i onclick="editTask(${task.taskid})" data-feather="edit" class="tricon"></i></div>
                                   </div>
                                   <span style="font-size: 0.91rem; font-family: 'DM Mono', monospace;">${descn}</span>
-                                  <p style="font-size: 0.80rem; font-family: 'DM Mono', monospace;${descm.includes('ago') ? 'color: darkred;' : ''}">${descm}</p>
+                                  <p style="font-size: 0.80rem; font-family: 'DM Mono', monospace;${((new Date(task.duedate) - new Date()) > 0) || (task.duedate == null) ? '' : 'color: darkred;'}">${descm}</p>
                                   <div class="task-itm-desc container" id="task-sb${task.taskid}" style="width: 100%;">${DOMPurify.sanitize(marked.parse(task.description))}</div>
                                 </div>
                               </div>
@@ -459,6 +459,9 @@ window.addEventListener('load', function () {
     pauseScan = false;
   });
   window.setInterval(() => {
+    if (!hasSessionToken()){
+      return;
+    }
     if (!pauseScan) {
       let m = gebi('taskEditorOffcanvas');
       let b = new bootstrap.Offcanvas(m);
@@ -978,8 +981,14 @@ Coloris({
 
 feather.replace();
 
+function hasSessionToken(){
+  return storage.read('sessionToken') != -1;
+}
+
 // Global clock renderer.
 window.setInterval(() => {
+  if (!hasSessionToken())
+    return;
   let f = new Date();
   let p = gebi('clock-statement');
   if (window.data) {
@@ -1073,12 +1082,11 @@ function changePage(newPage) {
     gebi(newPage).style.display = 'block';
     // Remove active element class.
     if (newPage.includes('view')) {
-      gebi(`${currentPage}-item`).classList.remove('active');
-      gebi(`${newPage}-item`).classList.add('active');
       location.hash = newPage;
     }
     currentPage = newPage;
   }
+  window.scrollTo({ top: 0, behavior: 'smooth' })
 }
 
 let sessionToken = storage.read('sessionToken');
@@ -1420,7 +1428,7 @@ function removeUserFromGroup(userid) {
 
 function refreshClient() {
   let fetchStartTime = performance.now();
-  request(['getClientPackageUpdate', sessionToken]).then(data => {
+  request(['getClientPackageUpdate', sessionToken]).then(async data => {
     let receivedTime = performance.now();
     if (data.status === 'INVALID') {
       storage.clear();
@@ -1486,15 +1494,6 @@ function refreshClient() {
       });
       let ababa = gebi('people-list');
       ababa.innerHTML = htmlList;
-      // Set greeting.
-      let btt = gebi('profile-view-item');
-      btt.addEventListener('mouseover', () => {
-        gebi('greeting').innerHTML = `My Profile`;
-      });
-      btt.addEventListener('mouseout', () => {
-        gebi('greeting').innerHTML = `Hi, ${data.me.username}`;
-      });
-      gebi('greeting').innerHTML = `Hi, ${data.me.username}`;
       // Set vaults entries
       let vaultDom = gebi('vaults');
       vaultDom.innerHTML = '';
@@ -1513,7 +1512,7 @@ function refreshClient() {
         baseCard.innerHTML = `<br>
                 <div class="card">
                   <div class="card-body" data-groupid="${group.groupid}">
-                    <h5 class="card-title">${group.groupname}&nbsp;<span style="float:right;border:2px solid;padding:3px;border-radius:25px;font-size:12px;" ${group.adminid == window.data.me.userid ? '' : 'hidden'}>Your vault</span>&nbsp;<span style="margin-left:5px;margin-right:5px;float:right;background-color:lightgreen;padding:5px;border-radius:25px;font-size:12px;" ${currentVaultId === group.groupid ? '' : 'hidden'}>Viewing</span></h5>
+                    <h5 class="card-title">${group.groupname}&nbsp;<span class="task-mini-tag" style="float:right;font-size: 11px;" ${group.adminid == window.data.me.userid ? '' : 'hidden'}>Your vault</span>&nbsp;<span class="task-mini-tag" style="float:right;background-color:lightgreen;border-color:${darkenHexColor('#90EE90', 50)};font-size:11px;margin-right: 5px;" ${currentVaultId === group.groupid ? '' : 'hidden'}>Viewing</span></h5>
                     <small style="font-family: 'DM Mono', monospace;">
                     <i data-feather="users" style="width: 1rem;"></i> ${group.users.length} ${group.users.length == 1 ? 'person' : 'people'}
                     &nbsp;
@@ -1523,6 +1522,7 @@ function refreshClient() {
                   </div>
                   <div class="card-footer" ${(currentVaultId === group.groupid) && !(group.adminid === uid) && !(group.adminid === uid) ? 'hidden' : ''}>
                     <button onclick="gotoVault(${group.groupid})" type="button" class="btn btn-primary" style="display:${(currentVaultId === group.groupid) ? 'none' : 'inline'};">Go to vault</button>
+                    <button onclick="changePage('people-view')" type="button" class="btn" style="background-color: lightgreen;display:${!(currentVaultId === group.groupid) ? 'none' : 'inline'};">View Members</button>
                     <button onclick="editVault(${group.groupid})" type="button" class="btn btn-secondary" style="display:${(group.adminid === uid) ? 'inline' : 'none'};">Edit vault</button>
                     <button onclick="deleteVault(${group.groupid})" type="button" class="btn btn-danger" style="display:${(group.adminid === uid) ? 'inline' : 'none'};">Delete vault</button>
                   </div>
@@ -1548,30 +1548,33 @@ function refreshClient() {
       else {
         window.currentTags.forEach(tag => {
           let dom = document.createElement('div');
-          dom.innerHTML = `<button onclick="renderTagEditor(this.dataset.tagid)" data-tagid="${tag.tagid}" type="button" class="btn w-100" style="border-radius:0;background-color: ${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</button>`;
+          dom.innerHTML = `<span onclick="renderTagEditor(this.dataset.tagid)" data-tagid="${tag.tagid}" type="button" class="task-mini-tag" style="margin: 5px;font-size: 14px;border-radius:20px;border-color:${darkenHexColor(tag.tagcolor, 50)};background-color: ${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">#${tag.tagname}</span>`;
           taskEditorList.appendChild(dom);
 
-          // now create the selectors for new task
+          // now create the task selectors for new task
           dom = document.createElement('div');
           dom.classList = 'col';
           dom.innerHTML = `
-                <input type="checkbox" class="checkbox-round" id="task-tag-number${tag.tagid}" name="task-tag-number${tag.tagid}" value="${tag.tagname}">
-                <label for="task-tag-number${tag.tagid}" style="margin-top:5px;white-space:nowrap;cursor:pointer;padding:0.25rem;padding-left:0.40rem;padding-right:0.40rem;border-radius:25px;background-color:${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</label><br>
-              `;
+              <div style="display:flex; margin-left: 10px; margin-right: 10px; margin-bottom: 5px;">
+                <input type="checkbox" id="task-tag-number${tag.tagid}" name="task-tag-number${tag.tagid}" value="${tag.tagname}">&nbsp;
+                <label for="task-tag-number${tag.tagid}" class="task-mini-tag" style="cursor:pointer;border-color:${darkenHexColor(tag.tagcolor, 50)};background-color:${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">#${tag.tagname}</label>
+              </div>
+                `;
           taskTags.appendChild(dom);
 
-          // now create the selectors for filters
+          // now create the task selectors for filters
 
           dom = document.createElement('div');
           dom.classList = 'col';
           dom.innerHTML = `
-                <input type="checkbox" class="checkbox-round" id="filter-tag-number${tag.tagid}" name="filter-tag-number${tag.tagid}" value="${tag.tagname}">
-                <label for="filter-tag-number${tag.tagid}" style="margin-top:5px;white-space:nowrap;cursor:pointer;padding:0.25rem;padding-left:0.40rem;padding-right:0.40rem;border-radius:25px;background-color:${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">${tag.tagname}</label><br>
-              `;
+              <div style="display:flex; margin-left: 10px; margin-right: 10px; margin-bottom: 5px;">
+                <input type="checkbox" id="filter-tag-number${tag.tagid}" name="filter-tag-number${tag.tagid}" value="${tag.tagname}">&nbsp;
+                <label for="filter-tag-number${tag.tagid}" class="task-mini-tag" style="cursor:pointer;border-color:${darkenHexColor(tag.tagcolor, 50)};background-color:${tag.tagcolor};${isLightColor(tag.tagcolor) ? 'color: black;' : 'color: white;'}">#${tag.tagname}</label><br>
+              </div>`;
           filterTags.appendChild(dom);
         });
         taskEditorList.style.display = 'none';
-        taskEditorList.style.display = 'block';
+        taskEditorList.style.display = 'flex';
       }
       /*
       <div class="col">
@@ -1600,6 +1603,27 @@ function refreshClient() {
         alert('User code copied to your clipboard. Only share with trusted people.');
       }
 
+    }
+
+    try {
+      //DOMPurify.sanitize(marked.parse(task.description))
+      const response = await fetch('/guide/GUIDE.md');
+      if (!response.ok) {
+        throw new Error(`Response status: ${response.status}`);
+      }
+      const content = await response.text();
+      gebi('guide-body').innerHTML = DOMPurify.sanitize(marked.parse(content));
+      // Correct images.
+      let g = gebi('guide-body');
+      let gx = g.getElementsByTagName('IMG');
+      for (let i = 0; i < gx.length; i++){
+        let imgg = gx[i];
+        imgg.style = 'width: auto; max-width: 100%;border:1px solid;';
+        imgg.classList = 'center';
+      }
+    }
+    catch(e){
+      console.error('Failed to load guide.');
     }
   });
 }
