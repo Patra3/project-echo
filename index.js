@@ -14,13 +14,17 @@ import pg from 'pg';
 import d from './config.json' assert { type: "json" };
 import https from 'https';
 import http from 'http';
+import compression from 'compression';
+import { minify_sync } from 'terser';
+import { minify } from 'html-minifier-terser';
 //////////////////////
 
 // Host our web app and define our APIs
 const app = express();
 app.use(express.json({limit: '1gb'})); // Set max attachment file size here.
+app.use(compression());
 
-let devMode = d['devmode'];
+const devMode = d['devmode'];
 const port = devMode ? 8080 : 80;
 
 // Connect secondary connection to SQL.
@@ -724,7 +728,7 @@ async function getFilters(groupID){
 function writeAttachment(ext, data){
     let rndFilename = nanoid() + `.${ext}`;
     let fullPath = path.resolve(`attachments/${rndFilename}`);
-    fs.writeFileSync(fullPath, data);
+    fs.writeFile(fullPath, data, () => {});
     return fullPath;
 }
 
@@ -752,24 +756,40 @@ app.use('/guide', express.static('guide'));
 ///// WEB APIs /////
 // Format: route: (req, res) => ()
 let webApiListeners = {
-    '/' : (req, res) => {
-        if (devMode){
+    '/' : async (req, res) => {
+        if (!devMode){
+            res.setHeader('content-type', 'text/html');
+            res.send(htmlmin);
+        }
+        else{
             res.sendFile(path.resolve('public/index.html'));
-            return;
         }
-        res.sendFile(path.resolve('public/index_min.html'));
     },
-    '/bundle.js' : (req, res) => {
-        res.sendFile(path.resolve('public/bundle.js'));
-    },
-    '/main.js' : (req, res) => {
-        if (devMode){
-            res.sendFile(path.resolve('public/main.js'));
-            return;
+    '/bundle.js' : async (req, res) => {
+        if (!devMode){
+            res.setHeader('content-type', 'text/javascript');
+            res.send(bundlejs);
         }
-        res.sendFile(path.resolve('public/main_ob.js'))
+        else{
+            res.sendFile(path.resolve('public/bundle.js'))
+        }
     },
-    '/favicon.ico' : (req, res) => {
+    '/main.js' : async (req, res) => {
+        if (!devMode){
+            res.setHeader('content-type', 'text/javascript');
+            res.send(mainjs);
+        }
+        else{
+            res.sendFile(path.resolve('public/main.js'))
+        }
+    },
+    '/sw.js' : async(req, res) => {
+        res.sendFile(path.resolve('public/sw.js'));
+    },
+    '/manifest.json' : async(req, res) => {
+        res.sendFile(path.resolve('manifest.json'));
+    },
+    '/favicon.ico' : async (req, res) => {
         res.sendFile(path.resolve('favicon.ico'));
     },
     '/api/:request' : async (req, res) => {
@@ -1724,6 +1744,38 @@ let httpServer = http.createServer(app);
 if (resetDB)
     await reset();
 await dbCheck();
+
+c.runBigProcess('Generating static content...');
+const bundlejs = minify_sync(fs.readFileSync(path.resolve('public/bundle.js')).toString('utf-8')).code;
+const mainjs = minify_sync(fs.readFileSync(path.resolve('public/main.js')).toString('utf-8')).code;
+const htmlmin = await minify(fs.readFileSync(path.resolve('public/index.html')).toString('utf-8'), 
+{
+    useShortDoctype: true,
+    trimCustomFragments: true,
+    sortClassName: true,
+    sortAttributes: true,
+    removeTagWhitespace: true,
+    removeStyleLinkTypeAttributes: true,
+    removeScriptTypeAttributes: true,
+    removeRedundantAttributes: true,
+    removeOptionalTags: true,
+    removeEmptyAttributes: true,
+    removeEmptyElements: false,
+    removeComments: true,
+    removeAttributeQuotes: true,
+    processScripts: ['text/html'],
+    processConditionalComments: true,
+    preserveLineBreaks: false,
+    minifyJS: true,
+    minifyCSS:true,
+    html5: true,
+    decodeEntities: true,
+    continueOnParseError: true,
+    collapseWhitespace: true,
+    collapseBooleanAttributes:true,
+    ignoreCustomComments:  [/.*Chen Z\..*/]
+});
+c.success('Done.');
 
 httpServer.listen(port, async () => {
     await cleanAttachments();

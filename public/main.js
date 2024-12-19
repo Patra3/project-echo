@@ -1,5 +1,11 @@
 
 /**
+ * 
+ * 
+ */
+
+
+/**
  * Short getElementById wrapper
  */
 function gebi(id) {
@@ -136,7 +142,7 @@ function updateTasksWithView() {
             date = new Date(task.createddate);
           }
           // get day
-          let thisGroup = date.toLocaleDateString(options = {
+          let thisGroup = date.toLocaleDateString({
             weekday: "narrow",
             year: "2-digit",
             month: "short",
@@ -308,9 +314,11 @@ function updateTasksWithView() {
                                     </div>
                                     <div class="col-6"><i style="color: darkred;" title="Delete" onclick="deleteTask(${task.taskid})" data-feather="trash" class="tricon"></i><i style="color: green;" onclick="dlAttachments(${task.attachmentid})" data-feather="download" class="tricon" ${task.attachmentid == null ? 'hidden' : ''}></i><i onclick="editTask(${task.taskid})" data-feather="edit" class="tricon"></i></div>
                                   </div>
+                                  <div onclick="editTask(${task.taskid})" style="cursor:pointer;">
                                   <span style="font-size: 0.91rem; font-family: 'DM Mono', monospace;">${descn}</span>
                                   <p style="font-size: 0.80rem; font-family: 'DM Mono', monospace;${((new Date(task.duedate) - new Date()) > 0) || (task.duedate == null) ? '' : 'color: darkred;'}">${descm}</p>
                                   <div class="task-itm-desc container" id="task-sb${task.taskid}" style="width: 100%;">${DOMPurify.sanitize(marked.parse(task.description))}</div>
+                                  </div>
                                 </div>
                               </div>
                             `);
@@ -361,6 +369,9 @@ function updateTasksWithView() {
 }
 
 function markComplete(taskid) {
+  if (isOffline()){
+    return;
+  }
   request(['mark', sessionToken, true, taskid]).then(data => {
     if (data.status != 'OK') {
       alert('An error has occured.');
@@ -385,6 +396,9 @@ function markIncomplete(taskid) {
 }
 
 function editTask(taskid) {
+  if (isOffline()){
+    return;
+  }
   pauseScan = true;
   let m = gebi('taskEditorOffcanvas');
   let b = new bootstrap.Offcanvas(m);
@@ -507,6 +521,9 @@ function deleteTask(taskid) {
 }
 
 function dlAttachments(taskid) {
+  if (isOffline()){
+    return;
+  }
   request(['dl', sessionToken, taskid]).then(data => {
     if (data.status == 'OK') {
       let f = gebi('dldl');
@@ -516,8 +533,9 @@ function dlAttachments(taskid) {
         data.serveId
       ])}`;
       f.method = "post";
-      f.target = "_blank";
+      f.target = "about:blank";
       f.setAttribute('download', data.serveId);
+      f.setAttribute('rel', 'noopener noreferrer')
       f.submit();
       //window.open(`/serv/${data.serveId}`, '_blank').focus();
     }
@@ -997,7 +1015,7 @@ window.setInterval(() => {
   }
 
   // Also global tasks update here.
-  if (f.getSeconds() == 0) {
+  if (f.getSeconds() % 10 == 0) {
     updateTasksWithView();
   }
 }, 1000);
@@ -1077,6 +1095,9 @@ abcba.onchange = () => {
 function changePage(newPage) {
   if (currentPage != newPage) {
     if (currentPage != 'main-view') {
+      if (isOffline()){
+        return;
+      }
       gebi(currentPage).style.display = 'none';
     }
     gebi(newPage).style.display = 'block';
@@ -1473,20 +1494,17 @@ function refreshClient() {
         let fileExt = pd.fileName.split('.')[1];
         let pdEmbedData = `data:image/${fileExt};base64,${Buffer.from(pd.hexData, 'hex').toString('base64')}`
         let dm = `
-            <br>
-              <div class="card">
+              <div class="card" style="border: 0;margin:auto;">
                 <div class="card-body">
                   <div class="row">
                     <div class="col-10">
-                      <h5>${user.username} &nbsp;<span style="background-color:lightblue;padding:5px;border-radius:25px;font-size:12px;" ${window.currentGroup.adminid == user.userid ? '' : 'hidden'}>Owner</span></h5>
+                      <h5>${user.username} &nbsp;<span class="task-mini-tag" style="background-color:lightblue;border-color:${darkenHexColor('#add8e6', 50)};font-size:11px;" ${window.currentGroup.adminid == user.userid ? '' : 'hidden'}>Owner</span></h5>
                     </div>
                     <div class="col-2">
                       <img src="${pdEmbedData}" style="float: right; height: 2rem; border-radius: 50px;">
                     </div>
                   </div>
-                </div>
-                <div class="card-footer" ${user.userid == window.currentGroup.adminid ? 'hidden' : ''}>
-                  <button onclick="removeUserFromGroup('${user.userid}')" type="button" class="btn btn-outline-danger">Remove</button>
+                  <button onclick="removeUserFromGroup('${user.userid}')" type="button" class="btn btn-outline-danger" ${user.userid == window.currentGroup.adminid ? 'hidden' : ''}>Remove</button>
                 </div>
               </div>
             `;
@@ -1520,7 +1538,7 @@ function refreshClient() {
                     &nbsp;
                     </small>
                   </div>
-                  <div class="card-footer" ${(currentVaultId === group.groupid) && !(group.adminid === uid) && !(group.adminid === uid) ? 'hidden' : ''}>
+                  <div class="card-footer" style="display: flex; flex-wrap: wrap; gap: 5px;">
                     <button onclick="gotoVault(${group.groupid})" type="button" class="btn btn-primary" style="display:${(currentVaultId === group.groupid) ? 'none' : 'inline'};">Go to vault</button>
                     <button onclick="changePage('people-view')" type="button" class="btn" style="background-color: lightgreen;display:${!(currentVaultId === group.groupid) ? 'none' : 'inline'};">View Members</button>
                     <button onclick="editVault(${group.groupid})" type="button" class="btn btn-secondary" style="display:${(group.adminid === uid) ? 'inline' : 'none'};">Edit vault</button>
@@ -1605,6 +1623,7 @@ function refreshClient() {
 
     }
 
+    let g = gebi('guide-body');
     try {
       //DOMPurify.sanitize(marked.parse(task.description))
       const response = await fetch('/guide/GUIDE.md');
@@ -1613,8 +1632,7 @@ function refreshClient() {
       }
       const content = await response.text();
       gebi('guide-body').innerHTML = DOMPurify.sanitize(marked.parse(content));
-      // Correct images.
-      let g = gebi('guide-body');
+      // The images need correction 😭😭😭💢💢💢
       let gx = g.getElementsByTagName('IMG');
       for (let i = 0; i < gx.length; i++){
         let imgg = gx[i];
@@ -1624,6 +1642,8 @@ function refreshClient() {
     }
     catch(e){
       console.error('Failed to load guide.');
+      console.log(e);
+      g.innerHTML = 'We are having trouble loading the help guide. Please relaunch the app to try again.';
     }
   });
 }
@@ -1654,6 +1674,10 @@ function renderTagEditor(id) {
   currentEditingTag = id;
 }
 
+function isOffline(){
+  return !window.navigator.onLine;
+}
+
 /**
  * Request against the API
  * @param request Object
@@ -1661,6 +1685,18 @@ function renderTagEditor(id) {
  * @return Object
  */
 async function request(request, hasBody = false, bodyContent = false) {
+  if (isOffline()){
+    if (request[0] == 'getClientPackageUpdate' || request[0] == 'fetchTasksWithView'){
+      // We can fetch from cache for now.
+      let v = JSON.parse(storage.read(`cache_${request[0]}`));
+      gebi('offline_banner').style.display = 'block';
+      return v;
+    }
+    return;
+  }
+  else{
+    gebi('offline_banner').style.display = 'none';
+  }
   openLoading();
   try {
     if (!hasBody) {
@@ -1671,6 +1707,10 @@ async function request(request, hasBody = false, bodyContent = false) {
         throw new Error(`Response status: ${response.status}`);
       }
       let d = await ret.json();
+      if (request[0] == 'getClientPackageUpdate' || request[0] == 'fetchTasksWithView'){
+        // Let's cache the content in case we are offline.
+        storage.write(`cache_${request[0]}`, JSON.stringify(d));
+      }
       closeLoading();
       return d;
     }
@@ -1685,7 +1725,11 @@ async function request(request, hasBody = false, bodyContent = false) {
       if (!ret.ok) {
         throw new Error(`Response status: ${response.status}`);
       }
-      let d = await ret.json();
+      let d = await ret.json();      
+      if (request[0] == 'getClientPackageUpdate' || request[0] == 'fetchTasksWithView'){
+        // Let's cache the content in case we are offline.
+        storage.write(`cache_${request[0]}`, JSON.stringify(d));
+      }
       closeLoading();
       return d;
     }
@@ -1723,6 +1767,19 @@ function tryLogin() {
     alert('An unexpected error has occurred.');
     console.error(e);
   });
+}
+
+if (navigator.serviceWorker){
+  window.addEventListener('load', () => { 
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      console.log('Registered service worker');
+    }).catch(e => {
+      console.log(e);
+    });
+  });
+}
+else{
+  console.log('no service worker api')
 }
 
 /**

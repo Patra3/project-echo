@@ -1,0 +1,49 @@
+{
+  "name" : "Project Echo",
+  "icons" : [
+    {
+      "src" : "guide/check-512.png",
+      "type" : "image/png",
+      "sizes" : "512x512"
+    },
+    {
+      "src" : "guide/check-192.png",
+      "type" : "image/png",
+      "sizes" : "192x192"
+    }
+  ],
+  "start_url" : "/",
+  "background_color" : "#FFFFFF",
+  "theme_color" : "#000000",
+  "display" : "standalone",
+  "short_name" : "Echo",
+  "shortcuts" : [
+    {
+      "name" : "Tasks",
+      "short_name" : "Tasks",
+      "description" : "View your current tasks",
+      "url" : "/#tasks-view"
+    },
+    {
+      "name" : "Tags",
+      "short_name" : "Tags",
+      "description" : "Create and modify tags",
+      "url" : "/#tags-view"
+    },
+    {
+      "name" : "Filters",
+      "short_name" : "Filters",
+      "description" : "Create and modify filters",
+      "url" : "/#filters-view"
+    },
+    {
+      "name" : "Vaults",
+      "short_name" : "Vaults",
+      "description" : "Create and modify Vaults",
+      "url" : "/#vaults-view"
+    }
+  ],
+  "scope": "/",
+  "description" : "Project Echo is a powerful todo list app currently in development.",
+  "categories" : ["todo","project","productivity"]
+}
