@@ -1754,7 +1754,7 @@ await dbCheck();
 c.runBigProcess('Generating static content...');
 const bundlejs = minify_sync(fs.readFileSync(path.resolve('public/bundle.js')).toString('utf-8')).code;
 const mainjs = minify_sync(fs.readFileSync(path.resolve('public/main.js')).toString('utf-8')).code;
-const swjs = minify_sync(fs.readFileSync(path.resolve('public/swjs.js')).toString('utf-8')).code;
+const swjs = minify_sync(fs.readFileSync(path.resolve('public/sw.js')).toString('utf-8')).code;
 const htmlmin = await minify(fs.readFileSync(path.resolve('public/index.html')).toString('utf-8'), 
 {
     useShortDoctype: true,
