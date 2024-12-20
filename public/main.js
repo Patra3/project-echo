@@ -504,6 +504,9 @@ window.addEventListener('load', function () {
 });
 
 function deleteTask(taskid) {
+  if (isOffline()){
+    return;
+  }
   if (confirm('Are you certain you wish to delete this task?')) {
     request(['deleteTask', sessionToken, taskid]).then(data => {
       if (data.status == 'OK') {
@@ -1092,10 +1095,10 @@ abcba.onchange = () => {
   updateTasksWithView();
 }
 
-function changePage(newPage) {
+function changePage(newPage, x = false) {
   if (currentPage != newPage) {
     if (currentPage != 'main-view') {
-      if (isOffline()){
+      if (isOffline() && !x){
         return;
       }
       gebi(currentPage).style.display = 'none';
@@ -1115,7 +1118,7 @@ let currentVaultId = storage.read('currentVaultId');
 let uid = -1;
 
 if (sessionToken != -1) {
-  changePage('main-page'); //main menu
+  changePage('main-page', true); //main menu
   currentPage = 'tasks-view';
   // This lets us keep the app page open on a refresh or bookmark
   let locHash = location.hash.substring(1);
@@ -1189,6 +1192,10 @@ function createNewGroup() {
  * Create a new task
  */
 function createNewTask() {
+
+  if (isOffline()){
+    alert('Currently unable to create task while offline. Please try again later.');
+  }
 
   let isEdit = false;
   let isEditId = -1;
